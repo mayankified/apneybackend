@@ -1,0 +1,87 @@
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-03T18:13:10.859Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-03T18:13:10.875Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-03T18:14:58.828Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-03T18:14:58.846Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-03T18:15:55.397Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-03T18:15:55.490Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:03:49.522Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:03:49.557Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:05:30.031Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:05:30.058Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:07:11.670Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:07:11.695Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:07:55.419Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:07:55.445Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:10:44.809Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:10:44.839Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:11:47.642Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:11:47.656Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:12:17.662Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:12:17.675Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:12:38.466Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:12:38.484Z"}
+{"level":"error","message":"SyntaxError: Expected double-quoted property name in JSON at position 74\n    at JSON.parse (<anonymous>)\n    at parse (F:\\apneyy\\backend\\node_modules\\body-parser\\lib\\types\\json.js:92:19)\n    at F:\\apneyy\\backend\\node_modules\\body-parser\\lib\\read.js:128:18\n    at AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    at invokeCallback (F:\\apneyy\\backend\\node_modules\\raw-body\\index.js:238:16)\n    at done (F:\\apneyy\\backend\\node_modules\\raw-body\\index.js:227:7)\n    at IncomingMessage.onEnd (F:\\apneyy\\backend\\node_modules\\raw-body\\index.js:287:7)\n    at IncomingMessage.emit (node:events:519:28)\n    at IncomingMessage.emit (node:domain:488:12)\n    at endReadableNT (node:internal/streams/readable:1696:12)","timestamp":"2025-01-05T19:14:55.303Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:52:53.856Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:52:53.868Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:53:06.312Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:53:06.342Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:53:23.364Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:53:23.377Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-05T19:53:33.904Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-05T19:53:33.916Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:25:59.440Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:25:59.453Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:27:56.299Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:27:56.344Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:29:47.574Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:29:47.603Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:31:51.697Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:31:51.751Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:32:36.588Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:32:36.622Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:33:04.214Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:33:04.230Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:34:48.358Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:34:48.386Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:35:32.570Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:35:32.584Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-08T09:36:22.841Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-08T09:36:22.859Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T13:53:50.739Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T13:53:50.768Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T13:54:48.366Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T13:54:48.392Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T14:03:21.025Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T14:03:21.038Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T14:17:46.676Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T14:17:46.700Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T14:22:19.118Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T14:22:19.135Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-09T14:24:24.576Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-09T14:24:24.607Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:23:41.609Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:23:41.622Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:53:28.020Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:53:28.037Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:54:00.809Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:54:00.837Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:54:14.359Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:54:14.374Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:55:32.356Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:55:32.393Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T09:56:04.011Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T09:56:04.035Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T10:11:52.633Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T10:11:52.654Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T10:12:37.486Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T10:12:37.504Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T10:12:54.570Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T10:12:54.584Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T10:14:15.294Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T10:14:15.309Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T10:15:33.197Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T10:15:33.224Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T11:00:13.346Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T11:00:13.365Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-10T11:01:17.733Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-10T11:01:17.754Z"}

@@ -1,0 +1,71 @@
+  generator client {
+    provider = "prisma-client-js"
+  }
+
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
+
+  model User {
+    id             Int       @id @default(autoincrement())
+    name           String    @db.VarChar(255) // Full name
+    email          String    @unique          // Unique email
+    phone          String    @unique          // Unique phone number
+    occupation     String
+    otherOccupation String?   // Optional for "Other" occupation
+    password       String    // Password (store hash)
+    createdAt      DateTime  @default(now())
+    updatedAt      DateTime  @updatedAt
+    favorites      Business[] @relation("UserFavorites") // List of businesses favorited by the user
+    reviews        Review[]  // List of reviews written by the user
+  }
+
+model Business {
+  id             Int       @id @default(autoincrement())
+  ownerName      String?    // Owner's name
+  email          String?    @unique          // Unique email
+  businessName   String    @unique // Business name
+  password       String?    // Password (store hash)
+  address        String?    // Address of the business
+  longitude      Float     // Longitude of the location
+  latitude       Float     // Latitude of the location
+  reviews        Review[]  // Array of reviews (relationship)
+  imageUrls      String[]  // Array of image URLs
+  tags           String[]  // Updated to relate to Tag model
+  keywords       Keyword[] @relation("BusinessKeywords") // Updated to relation with Keyword model
+  timing         Json?      // JSON object containing opening and closing times for seven days
+  features       String[]  // Array of business features (e.g., "Wi-Fi", "Parking")
+  isOpen         Boolean?   @default(true) // Open/Close status
+  isVerified     Boolean?   @default(false) // Whether the business is verified
+  description    String?   // Optional description
+  phoneNumber    String?   // Contact phone number
+  streetaddress  String?
+  city           String?
+  country        String?
+  zipcode        String?
+  state          String?
+  websiteUrl     String?   // Optional website URL
+  category       String?
+  documents      String[]  // Array of image links for documents
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime?  @updatedAt
+  favoritedBy    User[]    @relation("UserFavorites") // Users who have favorited this business
+}
+
+  model Review {
+    id             Int       @id @default(autoincrement())
+    content        String    // Review content
+    rating         Int       // Review rating (1-5 stars)
+    user           User      @relation(fields: [userId], references: [id])
+    userId         Int       // Foreign key to the User model
+    business       Business  @relation(fields: [businessId], references: [id])
+    businessId     Int       // Foreign key to the Business model
+    createdAt      DateTime  @default(now())
+  }
+  model Keyword {
+  id             Int       @id @default(autoincrement())
+  name           String    @unique // Keyword name (e.g., "Bakery", "Gym")
+  slug           String    @unique // URL-friendly identifier (e.g., "bakery", "gym")
+  businesses     Business[] @relation("BusinessKeywords") // Businesses associated with the keyword
+}
