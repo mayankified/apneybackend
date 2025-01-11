@@ -115,3 +115,7 @@
 {"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-11T08:22:23.748Z"}
 {"level":"info","message":"Redis connected successfully","timestamp":"2025-01-11T08:22:59.054Z"}
 {"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-11T08:22:59.071Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-11T09:15:06.677Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-11T09:15:06.690Z"}
+{"level":"info","message":"Redis connected successfully","timestamp":"2025-01-11T09:27:46.497Z"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-01-11T09:27:46.518Z"}

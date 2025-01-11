@@ -17,7 +17,7 @@ export const listBusinesses = async (
       longitude,
       latitude,
     } = req.query; // Extract values from query parameters
-    
+
     // Convert values to proper types
     const pageNum = Number(page);
     const limit = Number(pageSize);
@@ -33,7 +33,8 @@ export const listBusinesses = async (
     // Bounding box for 50 miles (approximate)
     const radiusInMiles = 50;
     const latOffset = radiusInMiles / 69; // 1 degree latitude ≈ 69 miles
-    const lngOffset = radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
+    const lngOffset =
+      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
     // Bounding box coordinates
     const minLat = userLatitude - latOffset;
     const maxLat = userLatitude + latOffset;
@@ -49,7 +50,7 @@ export const listBusinesses = async (
           { businessName: { contains: searchText, mode: "insensitive" } },
           { category: { contains: searchText, mode: "insensitive" } },
           {
-            keywords: { 
+            keywords: {
               some: {
                 name: {
                   contains: searchText,
@@ -63,16 +64,24 @@ export const listBusinesses = async (
       include: {
         keywords: true, // Include associated keywords for reference
       },
-      
     });
-    // Filter businesses within 50 miles
-    const filteredBusinesses = businesses.filter((business) => {
-      const distanceInMeters = getDistance(
-        { latitude: userLatitude, longitude: userLongitude },
-        { latitude: business.latitude, longitude: business.longitude }
-      );
-      return distanceInMeters <= radiusInMiles * 1609.34; // Convert miles to meters
-    });
+    // Add distances to businesses and filter businesses within 50 miles
+    const businessesWithDistance = businesses
+      .map((business) => {
+        const distanceInMeters = getDistance(
+          { latitude: userLatitude, longitude: userLongitude },
+          { latitude: business.latitude, longitude: business.longitude }
+        );
+        const distanceInMiles = distanceInMeters / 1609.34; // Convert meters to miles
+
+        return {
+          ...business,
+          distance: Number(distanceInMiles.toFixed(2)), // Append distance to each business
+        };
+      })
+      .filter((business) => business.distance <= radiusInMiles)
+      .sort((a, b) => a.distance - b.distance); // Keep only businesses within 50 miles
+
     // const filteredBusinesses = businesses;
     const matchingKeywords = await prisma.keyword.findMany({
       where: {
@@ -88,8 +97,8 @@ export const listBusinesses = async (
     // Extract keyword names
     const keywordNames = matchingKeywords.map((keyword) => keyword.name);
     // Pagination
-    const totalBusinesses = filteredBusinesses.length;
-    const paginatedBusinesses = filteredBusinesses.slice(
+    const totalBusinesses = businessesWithDistance.length;
+    const paginatedBusinesses = businessesWithDistance.slice(
       (pageNum - 1) * limit,
       pageNum * limit
     );
@@ -122,11 +131,9 @@ export const searchSuggestions = async (
     const { text = "" } = req.body; // Extract `text` from the request body
 
     if (typeof text !== "string" || text.trim() === "") {
-      res
-        .status(400)
-        .json({
-          error: "Text parameter is required and must be a non-empty string",
-        });
+      res.status(400).json({
+        error: "Text parameter is required and must be a non-empty string",
+      });
       return;
     }
 
@@ -166,7 +173,6 @@ export const searchSuggestions = async (
   }
 };
 
-
 // **Get Business Details by ID**
 export const getBusinessById = async (
   req: Request,
@@ -187,7 +193,7 @@ export const getBusinessById = async (
       },
       include: {
         keywords: true, // Include associated keywords
-        reviews: true,  // Include associated reviews (if you have a Review model)
+        reviews: true, // Include associated reviews (if you have a Review model)
       },
     });
 
@@ -203,7 +209,12 @@ export const getBusinessById = async (
     });
   } catch (error: unknown) {
     if (error instanceof Error) {
-      res.status(500).json({ error: "Error fetching business details", details: error.message });
+      res
+        .status(500)
+        .json({
+          error: "Error fetching business details",
+          details: error.message,
+        });
       return;
     }
     res.status(500).json({ error: "Unknown error occurred" });
