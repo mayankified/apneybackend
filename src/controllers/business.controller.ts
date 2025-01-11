@@ -17,9 +17,7 @@ export const listBusinesses = async (
       longitude,
       latitude,
     } = req.query; // Extract values from query parameters
-
-    console.log(req.query);
-
+    
     // Convert values to proper types
     const pageNum = Number(page);
     const limit = Number(pageSize);
@@ -31,13 +29,11 @@ export const listBusinesses = async (
       res.status(400).json({ error: "Invalid longitude or latitude" });
       return;
     }
-
+    const searchWords = searchText.split(/\s+/); // Split by spaces
     // Bounding box for 50 miles (approximate)
     const radiusInMiles = 50;
     const latOffset = radiusInMiles / 69; // 1 degree latitude ≈ 69 miles
-    const lngOffset =
-      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
-
+    const lngOffset = radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
     // Bounding box coordinates
     const minLat = userLatitude - latOffset;
     const maxLat = userLatitude + latOffset;
@@ -45,34 +41,10 @@ export const listBusinesses = async (
     const maxLng = userLongitude + lngOffset;
 
     // Get businesses within bounding box and search query
-    // const businesses = await prisma.business.findMany({
-    //   where: {
-    //     latitude: { gte: minLat, lte: maxLat },
-    //     longitude: { gte: minLng, lte: maxLng },
-    //     // OR: [
-    //     //   { businessName: { contains: searchText, mode: "insensitive" } },
-    //     //   { category: { contains: searchText, mode: "insensitive" } },
-    //     //   {
-    //     //     keywords: { 
-    //     //       some: {
-    //     //         name: {
-    //     //           contains: searchText,
-    //     //           mode: "insensitive", // Case-insensitive search
-    //     //         },
-    //     //       },
-    //     //     },
-    //     //   },
-    //     // ],
-    //   },
-    //   include: {
-    //     keywords: true, // Include associated keywords for reference
-    //   },
-      
-    // });
     const businesses = await prisma.business.findMany({
       where: {
-        // latitude: { gte: minLat, lte: maxLat },
-        // longitude: { gte: minLng, lte: maxLng },
+        latitude: { gte: minLat, lte: maxLat },
+        longitude: { gte: minLng, lte: maxLng },
         OR: [
           { businessName: { contains: searchText, mode: "insensitive" } },
           { category: { contains: searchText, mode: "insensitive" } },
@@ -91,21 +63,30 @@ export const listBusinesses = async (
       include: {
         keywords: true, // Include associated keywords for reference
       },
-      take: 10,
+      
     });
-
-    console.log(businesses);
-
     // Filter businesses within 50 miles
-    // const filteredBusinesses = businesses.filter((business) => {
-    //   const distanceInMeters = getDistance(
-    //     { latitude: userLatitude, longitude: userLongitude },
-    //     { latitude: business.latitude, longitude: business.longitude }
-    //   );
-    //   return distanceInMeters <= radiusInMiles * 1609.34; // Convert miles to meters
-    // });
-    const filteredBusinesses = businesses;
-
+    const filteredBusinesses = businesses.filter((business) => {
+      const distanceInMeters = getDistance(
+        { latitude: userLatitude, longitude: userLongitude },
+        { latitude: business.latitude, longitude: business.longitude }
+      );
+      return distanceInMeters <= radiusInMiles * 1609.34; // Convert miles to meters
+    });
+    // const filteredBusinesses = businesses;
+    const matchingKeywords = await prisma.keyword.findMany({
+      where: {
+        OR: searchWords.map((word) => ({
+          name: {
+            contains: word,
+            mode: "insensitive",
+          },
+        })),
+      },
+      take: 5, // Return only 5 matching keywords
+    });
+    // Extract keyword names
+    const keywordNames = matchingKeywords.map((keyword) => keyword.name);
     // Pagination
     const totalBusinesses = filteredBusinesses.length;
     const paginatedBusinesses = filteredBusinesses.slice(
@@ -119,6 +100,7 @@ export const listBusinesses = async (
       page: pageNum,
       pageSize: limit,
       businesses: paginatedBusinesses,
+      matchingKeywords: keywordNames,
     });
   } catch (error: unknown) {
     if (error instanceof Error) {
