@@ -12,10 +12,26 @@ import { errorHandler } from "./middleware/errorHandler";
 import os from "os";
 
 const app = express();
+// const prisma = new PrismaClient();
+// Define allowed origins
+const allowedOrigins = ["http://localhost:4000", "https://apneyy.om"];
+// Configure CORS
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allowed?: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true); // Allow requests from allowed origins
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: "GET,POST,PUT,PATCH,DELETE", // Allowed HTTP methods
+  credentials: true, // Allow cookies and credentials
+};
+
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json());
 app.use(morgan("combined"));
@@ -38,6 +54,8 @@ app.get("/", (req: Request, res: Response) => {
     hostname: os.hostname(),
   });
 });
+
+
 // Routes
 app.use("/api", routes);
 

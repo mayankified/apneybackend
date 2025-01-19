@@ -11,66 +11,115 @@ export const listBusinesses = async (
 ): Promise<void> => {
   try {
     const {
-      page = "1", // Default page number as string
-      pageSize = "20", // Default 20 businesses per page as string
       query: text = "", // Search text (name, keywords, category)
       longitude,
       latitude,
     } = req.query; // Extract values from query parameters
 
     // Convert values to proper types
-    const pageNum = Number(page);
-    const limit = Number(pageSize);
     const searchText = typeof text === "string" ? text.trim() : "";
-    const userLongitude = Number(longitude);
-    const userLatitude = Number(latitude);
+    const userLongitude = Number(latitude); // Swapped: latitude as longitude
+    const userLatitude = Number(longitude); // Swapped: longitude as latitude
 
     if (isNaN(userLongitude) || isNaN(userLatitude)) {
       res.status(400).json({ error: "Invalid longitude or latitude" });
       return;
     }
-    const searchWords = searchText.split(/\s+/); // Split by spaces
-    // Bounding box for 50 miles (approximate)
-    const radiusInMiles = 50;
+
+    console.log(
+      "Received Coordinates (Swapped): Lat:",
+      userLatitude,
+      "Long:",
+      userLongitude
+    );
+
+    const searchWords = searchText.split(/\s+/); // Split query text by spaces
+
+    // **Round location to 1 decimal**
+    const roundCoordinate = (value: number) => Math.round(value * 10) / 10;
+    const roundedLat = roundCoordinate(userLatitude);
+    const roundedLon = roundCoordinate(userLongitude);
+    await prisma.locationSearch.upsert({
+      where: {
+        roundedLat_roundedLon: {
+          roundedLat,
+          roundedLon,
+        },
+      },
+      update: { count: { increment: 1 } },
+      create: { roundedLat, roundedLon, count: 1 },
+    });
+    // **Increment item search counts**
+
+    await prisma.itemSearch.upsert({
+      where: { item: searchText.trim() }, // Trim spaces
+      update: { count: { increment: 1 } },
+      create: { item: searchText.trim(), count: 1 }, // Trim spaces
+    });
+
+    const radiusInMiles = 50; // Radius for the search (50 miles)
     const latOffset = radiusInMiles / 69; // 1 degree latitude ≈ 69 miles
     const lngOffset =
-      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
-    // Bounding box coordinates
+      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180))); // Longitude offset based on latitude
+
+    // **Bounding Box Coordinates:**
     const minLat = userLatitude - latOffset;
     const maxLat = userLatitude + latOffset;
     const minLng = userLongitude - lngOffset;
     const maxLng = userLongitude + lngOffset;
 
-    // Get businesses within bounding box and search query
+    console.log("Bounding Box:", { minLat, maxLat, minLng, maxLng });
+
+    // **Find businesses within bounding box and matching query**
     const businesses = await prisma.business.findMany({
       where: {
-        latitude: { gte: minLat, lte: maxLat },
-        longitude: { gte: minLng, lte: maxLng },
+        longitude: { gte: minLat, lte: maxLat }, // Swapped: using longitude as latitude
+        latitude: { gte: minLng, lte: maxLng }, // Swapped: using latitude as longitude
         OR: [
           { businessName: { contains: searchText, mode: "insensitive" } },
           { category: { contains: searchText, mode: "insensitive" } },
           {
             keywords: {
               some: {
-                name: {
-                  contains: searchText,
-                  mode: "insensitive", // Case-insensitive search
-                },
+                name: { contains: searchText, mode: "insensitive" },
+              },
+            },
+          },
+          {
+            tags: {
+              some: {
+                name: { contains: searchText, mode: "insensitive" },
               },
             },
           },
         ],
       },
-      include: {
-        keywords: true, // Include associated keywords for reference
+      select: {
+        id: true, // Unique identifier (required for keys and linking)
+        businessName: true, // Displayed in the business card
+        imageUrls: true, // Display first image
+        isOpen: true, // To show "Closed" badge
+        rating: true, // Display rating stars
+        category: true, // Category name (e.g., restaurant, salon)
+        address: true, // Business address (displayed in card)
+        latitude: true, // For display purposes
+        longitude: true, // For display purposes
+        isVerified: true, // To apply the verified filter
       },
     });
-    // Add distances to businesses and filter businesses within 50 miles
+
+    if (businesses.length === 0) {
+      console.log(
+        "No businesses found in this area with the given search text."
+      );
+    }
+
+    // **Add distances to businesses and filter businesses within 50 miles**
     const businessesWithDistance = businesses
-      .map((business) => {
+      .map((business: any) => {
         const distanceInMeters = getDistance(
           { latitude: userLatitude, longitude: userLongitude },
-          { latitude: business.latitude, longitude: business.longitude }
+          { latitude: business.longitude, longitude: business.latitude }
         );
         const distanceInMiles = distanceInMeters / 1609.34; // Convert meters to miles
 
@@ -79,40 +128,29 @@ export const listBusinesses = async (
           distance: Number(distanceInMiles.toFixed(2)), // Append distance to each business
         };
       })
-      .filter((business) => business.distance <= radiusInMiles)
-      .sort((a, b) => a.distance - b.distance); // Keep only businesses within 50 miles
+      .filter((business: any) => business.distance <= radiusInMiles)
+      .sort((a: any, b: any) => a.distance - b.distance); // Sort by distance
 
-    // const filteredBusinesses = businesses;
     const matchingKeywords = await prisma.keyword.findMany({
       where: {
         OR: searchWords.map((word) => ({
-          name: {
-            contains: word,
-            mode: "insensitive",
-          },
+          name: { contains: word, mode: "insensitive" },
         })),
       },
-      take: 5, // Return only 5 matching keywords
+      take: 5, // Return up to 5 matching keywords
     });
-    // Extract keyword names
-    const keywordNames = matchingKeywords.map((keyword) => keyword.name);
-    // Pagination
-    const totalBusinesses = businessesWithDistance.length;
-    const paginatedBusinesses = businessesWithDistance.slice(
-      (pageNum - 1) * limit,
-      pageNum * limit
-    );
 
-    // Response
+    const keywordNames = matchingKeywords.map((keyword: any) => keyword.name);
+    const totalBusinesses = businessesWithDistance.length;
+
     res.status(200).json({
       total: totalBusinesses,
-      page: pageNum,
-      pageSize: limit,
-      businesses: paginatedBusinesses,
+      businesses: businessesWithDistance,
       matchingKeywords: keywordNames,
     });
   } catch (error: unknown) {
     if (error instanceof Error) {
+      console.error("Error fetching businesses:", error.message);
       res
         .status(500)
         .json({ error: "Error fetching businesses", details: error.message });
@@ -138,7 +176,7 @@ export const searchSuggestions = async (
     }
 
     // Fetch keywords matching the search text (case-insensitive)
-    const suggestions = await prisma.keyword.findMany({
+    const suggestions = await prisma.tag.findMany({
       where: {
         name: {
           contains: text.trim(),
@@ -148,7 +186,6 @@ export const searchSuggestions = async (
       select: {
         id: true,
         name: true,
-        slug: true,
       },
       orderBy: {
         name: "asc", // Sort suggestions alphabetically
@@ -179,21 +216,52 @@ export const getBusinessById = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params; // Extract business ID from URL params
+    const { id } = req.params;
 
     if (!id) {
       res.status(400).json({ error: "Business ID is required" });
       return;
     }
 
-    // Fetch business details by ID
+    // Get current date (start of the day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dateString = today.toISOString().split('T')[0];
+
+    // Upsert ViewInteraction for the current date
+    await prisma.viewInteraction.upsert({
+      where: {
+        businessId_date: {
+          businessId: Number(id), // Business ID
+          date: new Date(dateString), // Date without time
+        },
+      },
+      update: {
+        views: { increment: 1 }, // Increment view count
+      },
+      create: {
+        businessId: Number(id),
+        views: 1,
+        date: new Date(dateString), // Set the date
+      },
+    });
+
+    // Fetch business details
     const business = await prisma.business.findUnique({
       where: {
-        id: Number(id), // Convert id to number since Prisma expects an integer
+        id: Number(id),
       },
       include: {
-        keywords: true, // Include associated keywords
-        reviews: true, // Include associated reviews (if you have a Review model)
+        keywords: true,
+        reviews: {
+          include: {
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -202,21 +270,14 @@ export const getBusinessById = async (
       return;
     }
 
-    // Respond with the business details
     res.status(200).json({
       success: true,
       business,
     });
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res
-        .status(500)
-        .json({
-          error: "Error fetching business details",
-          details: error.message,
-        });
-      return;
-    }
-    res.status(500).json({ error: "Unknown error occurred" });
+  } catch (error) {
+    res.status(500).json({
+      error: "Error fetching business details",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 };

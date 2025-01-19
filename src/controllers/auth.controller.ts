@@ -26,6 +26,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         occupation,
         otherOccupation,
       },
+      include: {
+        favorites: true, // Include user's favorite businesses in the response
+      },
     });
 
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "1h" });
@@ -56,7 +59,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        favorites: true, // Include user's favorite businesses in the response
+      },
+    });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       res.status(401).json({ error: "Invalid email or password" });
@@ -80,7 +88,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 };
-
 
 // **Business Sign-up**
 export const businessRegister = async (
@@ -165,7 +172,9 @@ export const businessRegister = async (
   } catch (error: unknown) {
     if (error instanceof Error) {
       if ((error as any).code === "P2002") {
-        res.status(400).json({ error: "Business email or name already exists" });
+        res
+          .status(400)
+          .json({ error: "Business email or name already exists" });
         return;
       }
       res.status(500).json({
@@ -177,8 +186,6 @@ export const businessRegister = async (
     res.status(500).json({ error: "Unknown error occurred" });
   }
 };
-
-
 
 // **Business Sign-in**
 export const businessLogin = async (
