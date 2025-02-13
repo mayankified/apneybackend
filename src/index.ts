@@ -1,20 +1,22 @@
-require("dotenv").config();
-import express, { Request, Response, NextFunction } from "express";
+import express,{ Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import routes from "./routes";
-import { redisClient } from "./config/redis";
 import logger from "./utils/logger";
 import { errorHandler } from "./middleware/errorHandler";
 import os from "os";
+import { redisClient } from './config/redis';
+
 
 const app = express();
-// const prisma = new PrismaClient();
+
+
 // Define allowed origins
-const allowedOrigins = ["http://localhost:4000", "https://apneyy.om"];
+const allowedOrigins = ["http://localhost:4000", "https://apneyy.com","https://www.apneyy.com","http://localhost:5173","http://localhost:5174","https://apneyy-partners.vercel.app","https://partner.apneyy.com","https://admin.apneyy.com","https://admin-apneyy.vercel.app"];
+
 // Configure CORS
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allowed?: boolean) => void) => {
@@ -28,15 +30,14 @@ const corsOptions = {
   credentials: true, // Allow cookies and credentials
 };
 
-
 // Middleware
 app.use(helmet());
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json());
 app.use(morgan("combined"));
-
-// Rate limiting
+app.use(express.urlencoded({ extended: true }));
+// Rate limiting  
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -55,7 +56,6 @@ app.get("/", (req: Request, res: Response) => {
   });
 });
 
-
 // Routes
 app.use("/api", routes);
 
@@ -68,7 +68,8 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer(): Promise<void> {
   try {
-    // await redisClient.connect();
+    // Test connection to Redis
+    await redisClient.ping(); // Simple Redis ping to ensure connection works
     logger.info("Redis connected successfully");
 
     app.listen(PORT, () => {

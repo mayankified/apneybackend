@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { getDistance } from "geolib";
+import { redisClient } from "../config/redis";
 
 const prisma = new PrismaClient();
 
@@ -35,22 +36,6 @@ export const listBusinesses = async (
 
     const searchWords = searchText.split(/\s+/); // Split query text by spaces
 
-    // **Round location to 1 decimal**
-    const roundCoordinate = (value: number) => Math.round(value * 10) / 10;
-    const roundedLat = roundCoordinate(userLatitude);
-    const roundedLon = roundCoordinate(userLongitude);
-    await prisma.locationSearch.upsert({
-      where: {
-        roundedLat_roundedLon: {
-          roundedLat,
-          roundedLon,
-        },
-      },
-      update: { count: { increment: 1 } },
-      create: { roundedLat, roundedLon, count: 1 },
-    });
-    // **Increment item search counts**
-
     await prisma.itemSearch.upsert({
       where: { item: searchText.trim() }, // Trim spaces
       update: { count: { increment: 1 } },
@@ -79,18 +64,19 @@ export const listBusinesses = async (
           { businessName: { contains: searchText, mode: "insensitive" } },
           { category: { contains: searchText, mode: "insensitive" } },
           {
-            keywords: {
-              some: {
-                name: { contains: searchText, mode: "insensitive" },
-              },
-            },
-          },
-          {
             tags: {
               some: {
                 name: { contains: searchText, mode: "insensitive" },
               },
             },
+          },
+        ],
+        AND: [
+          {
+            OR: [
+              { email: null },
+              { email: { not: null }, isVerified: true },
+            ],
           },
         ],
       },
@@ -131,7 +117,7 @@ export const listBusinesses = async (
       .filter((business: any) => business.distance <= radiusInMiles)
       .sort((a: any, b: any) => a.distance - b.distance); // Sort by distance
 
-    const matchingKeywords = await prisma.keyword.findMany({
+    const matchingKeywords = await prisma.tag.findMany({
       where: {
         OR: searchWords.map((word) => ({
           name: { contains: word, mode: "insensitive" },
@@ -210,7 +196,6 @@ export const searchSuggestions = async (
   }
 };
 
-// **Get Business Details by ID**
 export const getBusinessById = async (
   req: Request,
   res: Response
@@ -223,10 +208,20 @@ export const getBusinessById = async (
       return;
     }
 
+    const cacheKey = `business:${id}`; // Unique cache key for this business
+    const cachedData = await redisClient.get(cacheKey);
+
+    // Return cached data if it exists
+    if (cachedData) {
+      console.log("Cache hit for business:", id);
+      res.status(200).json(JSON.parse(cachedData));
+      return;
+    }
+
     // Get current date (start of the day)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dateString = today.toISOString().split('T')[0];
+    const dateString = today.toISOString().split("T")[0];
 
     // Upsert ViewInteraction for the current date
     await prisma.viewInteraction.upsert({
@@ -246,14 +241,16 @@ export const getBusinessById = async (
       },
     });
 
-    // Fetch business details
+    // Fetch business details from the database
     const business = await prisma.business.findUnique({
       where: {
         id: Number(id),
       },
       include: {
-        keywords: true,
         reviews: {
+          where: {
+            isVerified: true, // Only show verified reviews
+          },
           include: {
             user: {
               select: {
@@ -270,14 +267,574 @@ export const getBusinessById = async (
       return;
     }
 
-    res.status(200).json({
+    const responseData = {
       success: true,
       business,
+    };
+
+    // Cache the fetched data for 1 hour
+    await redisClient.setex(cacheKey, 3600, JSON.stringify(responseData));
+
+    console.log("Cache miss for business:", id);
+    res.status(200).json(responseData);
+  } catch (error: any) {
+    console.error("Error fetching business details:", error);
+    res.status(500).json({
+      error: "Error fetching business details",
+      details: error.message || "Unknown error",
+    });
+  }
+};
+
+// Get Business Statistics
+export const getBusinessStats = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json({ error: "Business ID is required" });
+      return;
+    }
+
+    // Fetch Total Views for the business
+    const totalViews = await prisma.viewInteraction.aggregate({
+      where: { businessId: Number(id) },
+      _sum: { views: true },
+    });
+
+    const newReviewsCount = await prisma.review.count({
+      where: {
+        businessId: Number(id),
+      },
+    });
+
+    // Calculate Average Rating for the business
+    const averageRating = await prisma.review.aggregate({
+      where: { businessId: Number(id) },
+      _avg: { rating: true },
+    });
+
+    // Count Favorites for the business
+    const favoriteCount = await prisma.business.findUnique({
+      where: { id: Number(id) },
+      select: { favoritedBy: true },
+    });
+
+    if (!favoriteCount) {
+      res.status(404).json({ error: "Business not found" });
+      return;
+    }
+
+    // Return the aggregated statistics
+    res.status(200).json({
+      success: true,
+      data: {
+        totalViews: totalViews._sum.views || 0,
+        newReviews: newReviewsCount || 0,
+        averageRating: averageRating._avg.rating || 0,
+        favorites: favoriteCount.favoritedBy.length || 0,
+      },
     });
   } catch (error) {
     res.status(500).json({
-      error: "Error fetching business details",
+      error: "Error fetching business statistics",
       details: error instanceof Error ? error.message : "Unknown error",
     });
+  }
+};
+
+export const toggleBusinessOpenState = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id, state } = req.body; // Extract id and state ('open' or 'close') from the request body
+
+    // Validate parameters
+    if (!id || !state) {
+      res
+        .status(400)
+        .json({ error: "Both 'id' and 'state' parameters are required." });
+      return;
+    }
+
+    if (!["open", "close"].includes(state)) {
+      res
+        .status(400)
+        .json({ error: "State must be either 'open' or 'close'." });
+      return;
+    }
+
+    // Convert 'state' to boolean
+    const isOpen = state === "open";
+
+    // Update the `isOpen` field in the database
+    const updatedBusiness = await prisma.business.update({
+      where: { id: Number(id) },
+      data: { isOpen },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Business state updated to '${state}'.`,
+      business: updatedBusiness,
+    });
+  } catch (error: any) {
+    console.error("Error toggling business state:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to toggle the business open state.",
+      details: error.message,
+    });
+  }
+};
+
+export const getBusinessReviews = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params; // Get business ID from URL params
+
+    // Validate business ID
+    if (!id) {
+      res.status(400).json({ error: "Business ID is required" });
+      return;
+    }
+
+    const businessId = Number(id);
+    const cacheKey = `businessReviews:${businessId}`; // Unique cache key for reviews
+
+    // Check if cached data exists
+    const cachedData = await redisClient.get(cacheKey);
+    if (cachedData) {
+      console.log("Cache hit for business reviews");
+      res.status(200).json({
+        success: true,
+        data: JSON.parse(cachedData),
+      });
+      return;
+    }
+
+    // Fetch reviews for the business
+    const reviews = await prisma.review.findMany({
+      where: {
+        businessId, // Ensure the ID is a number
+      },
+      include: {
+        user: {
+          select: {
+            name: true, // Include the name of the user who posted the review
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc", // Sort by most recent reviews
+      },
+    });
+
+    // Cache the reviews with an expiration time (e.g., 1 hour)
+    await redisClient.setex(cacheKey, 3600, JSON.stringify(reviews)); // Cache for 1 hour
+
+    // Return reviews, even if the array is empty
+    res.status(200).json({
+      success: true,
+      data: reviews,
+    });
+  } catch (error) {
+    console.error("Error fetching reviews:", error);
+    res.status(500).json({
+      error: "Error fetching reviews",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+export const getBusinessAnalytics = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params; // Get the business ID from the request params
+
+    if (!id) {
+      res.status(400).json({ error: "Business ID is required." });
+      return;
+    }
+
+    const businessId = Number(id);
+
+    // Define a cache key based on the business ID
+    const cacheKey = `businessAnalytics:${businessId}`;
+
+    // Check if data is already cached
+    const cachedData = await redisClient.get(cacheKey);
+    if (cachedData) {
+      console.log("Cache hit for business analytics");
+      res.status(200).json(JSON.parse(cachedData));
+      return;
+    }
+
+    // Fetch view interactions for the last 7 days
+    const last7DaysViews = await prisma.viewInteraction.findMany({
+      where: {
+        businessId,
+        date: {
+          gte: new Date(new Date().setDate(new Date().getDate() - 7)), // Last 7 days
+        },
+      },
+      orderBy: { date: "asc" },
+    });
+
+    const viewCount = Array(7).fill(0); // Initialize an array with 7 days
+    last7DaysViews.forEach((interaction) => {
+      const dayIndex = Math.floor(
+        (new Date(interaction.date).getTime() -
+          new Date().setDate(new Date().getDate() - 7)) /
+          (1000 * 60 * 60 * 24)
+      );
+      if (dayIndex >= 0 && dayIndex < 7) {
+        viewCount[dayIndex] = interaction.views;
+      }
+    });
+
+    // Fetch reviews for the last 7 days
+    const last7DaysReviews = await prisma.review.findMany({
+      where: {
+        businessId,
+        createdAt: {
+          gte: new Date(new Date().setDate(new Date().getDate() - 7)), // Last 7 days
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const ratingData = Array(7).fill(0); // Initialize an array for ratings
+    const ratingCounts = Array(7).fill(0); // To calculate the average per day
+
+    last7DaysReviews.forEach((review) => {
+      const dayIndex = Math.floor(
+        (new Date(review.createdAt).getTime() -
+          new Date().setDate(new Date().getDate() - 7)) /
+          (1000 * 60 * 60 * 24)
+      );
+      if (dayIndex >= 0 && dayIndex < 7) {
+        ratingData[dayIndex] += review.rating;
+        ratingCounts[dayIndex] += 1;
+      }
+    });
+
+    // Calculate the average rating for each day
+    for (let i = 0; i < 7; i++) {
+      if (ratingCounts[i] > 0) {
+        ratingData[i] = ratingData[i] / ratingCounts[i];
+      }
+    }
+
+    // Prepare response data
+    const responseData = {
+      views: viewCount,
+      ratings: ratingData,
+    };
+
+    // Cache the data with an expiration time (e.g., 1 hour)
+    await redisClient.setex(cacheKey, 3600, JSON.stringify(responseData)); // 3600 seconds = 1 hour
+
+    res.status(200).json({
+      success: true,
+      data: responseData,
+    });
+  } catch (error) {
+    console.error("Error fetching analytics data:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch analytics data.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+export const getSearchSuggestions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { query } = req.body; // Extract query from request body
+    console.log("Received query:", query);
+
+    // Validate that query is provided and is a string
+    if (!query || typeof query !== "string") {
+      res
+        .status(400)
+        .json({ error: "Search query is required and must be a string." });
+      return;
+    }
+
+    // Search for businesses matching the query in the `businessName`
+    const suggestions = await prisma.business.findMany({
+      where: {
+        businessName: {
+          contains: query, // Perform a case-insensitive search
+          mode: "insensitive",
+        },
+      },
+      select: {
+        id: true, // Include the business ID
+        businessName: true,
+        zipcode: true,
+      },
+      take: 5, // Limit results to 5
+    });
+
+    res.status(200).json({
+      success: true,
+      data: suggestions,
+    });
+  } catch (error) {
+    console.error("Error fetching search suggestions:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch search suggestions.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+// **Delete Business**
+export const deleteBusiness = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { businessId } = req.body;
+    if (!businessId) {
+      res.status(400).json({ error: "Business ID is required" });
+      return;
+    }
+    await prisma.review.deleteMany({
+      where: { businessId: businessId },
+    });
+    await prisma.viewInteraction.deleteMany({
+      where: { businessId: businessId },
+    });
+    const deletedBusiness = await prisma.business.delete({
+      where: { id: businessId },
+    });
+
+    res
+      .status(200)
+      .json({ message: "Business deleted successfully", deletedBusiness });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete business",
+      details: (error as Error).message,
+    });
+  }
+};
+
+export const updateImage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { businessId, imageUrl, action } = req.body;
+
+    if (!businessId || !imageUrl || !action) {
+      res.status(400).json({
+        error: "Business ID, imageUrl, and action (add/remove) are required.",
+      });
+      return;
+    }
+
+    // Ensure businessId is a number
+    const businessIdInt = parseInt(businessId, 10);
+    if (isNaN(businessIdInt)) {
+      res.status(400).json({ error: "Invalid business ID format." });
+      return;
+    }
+
+    // Fetch the business
+    const business = await prisma.business.findUnique({
+      where: { id: businessIdInt },
+    });
+
+    if (!business) {
+      res.status(404).json({ error: "Business not found." });
+      return;
+    }
+
+    // Ensure imageUrls is an array
+    let updatedImageUrls: string[] = Array.isArray(business.imageUrls)
+      ? business.imageUrls
+      : [];
+
+    if (action === "remove") {
+      // Remove image URL if it exists
+      updatedImageUrls = updatedImageUrls.filter((url) => url !== imageUrl);
+    } else if (action === "add") {
+      // Add new image URL if not already in the list
+      if (!updatedImageUrls.includes(imageUrl)) {
+        updatedImageUrls.push(imageUrl);
+      }
+    } else {
+      res.status(400).json({ error: "Invalid action. Use 'add' or 'remove'." });
+      return;
+    }
+
+    // Update the business record
+    const updatedBusiness = await prisma.business.update({
+      where: { id: businessIdInt },
+      data: {
+        imageUrls: updatedImageUrls,
+        isImageUpdated: action == "add", // Mark as updated
+      },
+    });
+
+    await res
+      .status(200)
+      .json({ message: "Image update successful.", updatedBusiness });
+  } catch (error) {
+    console.error("Error updating images:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+export const listBusinessesByCategory = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { longitude, latitude, categories } = req.body;
+
+    // Convert input to proper types
+    const userLongitude = Number(longitude);
+    const userLatitude = Number(latitude);
+    const category = typeof categories === "string" ? categories.trim() : "";
+
+    // Validate longitude and latitude
+    if (isNaN(userLongitude) || isNaN(userLatitude)) {
+      res.status(400).json({ error: "Invalid longitude or latitude" });
+      return;
+    }
+
+    console.log("User Coordinates: Lat:", userLatitude, "Long:", userLongitude);
+    console.log("Category:", category);
+
+    const radiusInMiles = 50; // Search radius in miles
+    const latOffset = radiusInMiles / 69; // Approx 1 degree latitude = 69 miles
+    const lngOffset =
+      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180))); // Adjust for latitude
+
+    // Bounding Box Calculation
+    const minLat = userLatitude - latOffset;
+    const maxLat = userLatitude + latOffset;
+    const minLng = userLongitude - lngOffset;
+    const maxLng = userLongitude + lngOffset;
+
+    console.log("Bounding Box:", { minLat, maxLat, minLng, maxLng });
+    // Fetch businesses in the bounding box with matching category
+    const businesses = await prisma.business.findMany({
+      where: {
+        latitude: { gte: minLng, lte: maxLng },
+        longitude: { gte: minLat, lte: maxLat },
+        ...(category
+          ? { category: { equals: category, mode: "insensitive" } }
+          : {}),
+      },
+      select: {
+        id: true,
+        businessName: true,
+        imageUrls: true,
+        isOpen: true,
+        rating: true,
+        category: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        isVerified: true,
+        interactions: {
+          select: {
+            views: true,
+          },
+        },
+      },
+    });
+    console.log(businesses);
+    // If no businesses are found in the location boundary, use a fallback query
+    if (businesses.length === 0) {
+      const overallBusinesses = await prisma.business.findMany({
+        where: {
+          ...(category ? { category: { equals: category, mode: "insensitive" } } : {}),
+        },
+        select: {
+          id: true,
+          businessName: true,
+          imageUrls: true,
+          isOpen: true,
+          rating: true,
+          category: true,
+          address: true,
+          latitude: true,
+          longitude: true,
+          isVerified: true,
+          interactions: {
+            select: {
+              views: true,
+            },
+          },
+        },
+        take: 20,
+      });
+    
+      // Shuffle the array randomly
+      const shuffledBusinesses = overallBusinesses.sort(() => 0.5 - Math.random());
+    
+      // Pick 5 random businesses and set distance to null (since location is ignored)
+      const fallbackBusinesses = shuffledBusinesses.slice(0, 5).map(business => ({
+        ...business,
+        distance: null,
+      }));
+    
+      res.status(200).json({
+        total: fallbackBusinesses.length,
+        businesses: fallbackBusinesses,
+        current: false,
+      });
+      return;
+    }
+    
+    // Calculate distances and filter businesses within 50 miles
+    const businessesWithDistance = businesses
+      .map((business) => {
+        const distanceInMeters = getDistance(
+          { latitude: userLatitude, longitude: userLongitude },
+          { latitude: business.longitude, longitude: business.latitude }
+        );
+        const distanceInMiles = distanceInMeters / 1609.34;
+
+        return {
+          ...business,
+          distance: Number(distanceInMiles.toFixed(2)),
+          totalViews: business.interactions.reduce(
+            (sum, interaction) => sum + interaction.views,
+            0
+          ), // Using the correct field name
+        };
+      })
+      .filter((business) => business.distance <= radiusInMiles)
+      .sort((a, b) => b.totalViews - a.totalViews)
+      .slice(0, 5);
+
+    res.status(200).json({
+      total: businessesWithDistance.length,
+      businesses: businessesWithDistance,
+      current: true,
+    });
+  } catch (error) {
+    console.error("Error fetching businesses:", error);
+    res.status(500).json({ error: "Error fetching businesses" });
   }
 };

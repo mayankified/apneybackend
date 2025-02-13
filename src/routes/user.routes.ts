@@ -6,6 +6,7 @@ import {
   getFavorites,
   postReview,
   getUserReviews,
+  deleteUser,
 } from "../controllers/user.controller";
 import { validateRequest } from "../middleware/validator";
 
@@ -83,9 +84,6 @@ router.post(
       .isString()
       .notEmpty()
       .withMessage("Review content cannot be empty"),
-    body("rating")
-      .isInt({ min: 1, max: 5 })
-      .withMessage("Rating must be an integer between 1 and 5"),
   ],
   validateRequest,
   postReview
@@ -106,5 +104,5 @@ router.post(
   validateRequest,
   getUserReviews
 );
-
+router.post("/delete-account",validateRequest,deleteUser)
 export default router;

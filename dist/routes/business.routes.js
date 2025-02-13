@@ -25,10 +25,7 @@ router.post("/list", [
         .isInt({ min: 1, max: 100 })
         .withMessage("Limit must be an integer between 1 and 100"),
     // Search parameters
-    (0, express_validator_1.query)("q")
-        .optional()
-        .isString()
-        .withMessage("Query must be a string"),
+    (0, express_validator_1.query)("q").optional().isString().withMessage("Query must be a string"),
     (0, express_validator_1.query)("category")
         .optional()
         .isString()
@@ -62,4 +59,12 @@ router.get("/:id", [
         .withMessage("Business ID must be a valid integer"),
 ], validator_1.validateRequest, business_controller_1.getBusinessById // Controller for fetching business details by ID
 );
+router.get("/busdata/:id", validator_1.validateRequest, business_controller_1.getBusinessStats);
+router.post("/togglestatus", validator_1.validateRequest, business_controller_1.toggleBusinessOpenState);
+router.get("/getreviews/:id", validator_1.validateRequest, business_controller_1.getBusinessReviews);
+router.get("/anal/:id", validator_1.validateRequest, business_controller_1.getBusinessAnalytics);
+router.post("/search-suggestions", validator_1.validateRequest, business_controller_1.getSearchSuggestions);
+router.post("/delete-account", validator_1.validateRequest, business_controller_1.deleteBusiness);
+router.post("/update-image", validator_1.validateRequest, business_controller_1.updateImage);
+router.post("/getbusbycat", validator_1.validateRequest, business_controller_1.listBusinessesByCategory);
 exports.default = router;

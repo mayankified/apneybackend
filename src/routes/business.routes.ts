@@ -1,8 +1,20 @@
 // src/routes/business.routes.ts
 
 import express from "express";
-import { query,body, param } from "express-validator";
-import { getBusinessById, listBusinesses, searchSuggestions } from "../controllers/business.controller";
+import { query, body, param } from "express-validator";
+import {
+  deleteBusiness,
+  getBusinessAnalytics,
+  getBusinessById,
+  getBusinessReviews,
+  getBusinessStats,
+  getSearchSuggestions,
+  listBusinesses,
+  listBusinessesByCategory,
+  searchSuggestions,
+  toggleBusinessOpenState,
+  updateImage,
+} from "../controllers/business.controller";
 import { validateRequest } from "../middleware/validator";
 
 const router = express.Router();
@@ -24,12 +36,9 @@ router.post(
       .optional()
       .isInt({ min: 1, max: 100 })
       .withMessage("Limit must be an integer between 1 and 100"),
-    
+
     // Search parameters
-    query("q")
-      .optional()
-      .isString()
-      .withMessage("Query must be a string"),
+    query("q").optional().isString().withMessage("Query must be a string"),
     query("category")
       .optional()
       .isString()
@@ -75,4 +84,12 @@ router.get(
   validateRequest,
   getBusinessById // Controller for fetching business details by ID
 );
+router.get("/busdata/:id", validateRequest, getBusinessStats);
+router.post("/togglestatus", validateRequest, toggleBusinessOpenState);
+router.get("/getreviews/:id", validateRequest, getBusinessReviews);
+router.get("/anal/:id", validateRequest, getBusinessAnalytics);
+router.post("/search-suggestions",validateRequest, getSearchSuggestions);
+router.post("/delete-account",validateRequest,deleteBusiness)
+router.post("/update-image",validateRequest,updateImage)
+router.post("/getbusbycat",validateRequest,listBusinessesByCategory)
 export default router;

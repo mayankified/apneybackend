@@ -14,34 +14,41 @@ model User {
   phone           String     @unique
   occupation      String
   otherOccupation String?
+  avatar          String? 
   password        String
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
   reviews         Review[]
+  reports   Report[] // ✅ Added relation field for reports made by the user
+  resetToken      String?    @db.VarChar(255) // Token for password reset
+  resetTokenExpiry DateTime?  // Expiry for the reset token
   favorites       Business[] @relation("UserFavorites")
 }
 
 model Business {
-  id            Int       @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   ownerName     String?
-  email         String?   @unique
-  businessName  String    @unique
+  email         String?           @unique
+  businessName  String
   password      String?
+  reports     Report[] // ✅ Added relation field for reports against this busi
+  businessId    String?
+  isImageUpdated   Boolean?          @default(false) // New field added
   address       String?
   longitude     Float
   latitude      Float
-  rating        Float?    @default(0.0)
+  rating        Float?            @default(0.0)
   imageUrls     String[]
   timing        Json?
   features      String[]
-  isOpen        Boolean?  @default(true)
-  isVerified    Boolean?  @default(false)
+  isOpen        Boolean?          @default(true)
+  isVerified    Boolean?          @default(false)
   description   String?
   phoneNumber   String?
   websiteUrl    String?
   documents     String[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime? @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime?         @updatedAt
   city          String?
   country       String?
   streetaddress String?
@@ -49,27 +56,27 @@ model Business {
   zipcode       String?
   category      String?
   reviews       Review[]
-  keywords      Keyword[] @relation("BusinessKeywords")
-  tags          Tag[]     @relation("BusinessTags")
-  favoritedBy   User[]    @relation("UserFavorites")
+  hasApplied    Boolean?          @default(false)
+  tags          Tag[]             @relation("BusinessTags")
+  favoritedBy   User[]            @relation("UserFavorites")
   interactions  ViewInteraction[]
+  keywords      String[] // Keywords as an array of strings
+  resetToken      String?    @db.VarChar(255) // Token for password reset
+  resetTokenExpiry DateTime?  // Expiry for the reset token
 }
 
 model Review {
   id         Int      @id @default(autoincrement())
   content    String
-  rating     Int
+  rating     Int      // Overall rating (e.g., average of individual aspects)
+  aspects    Json     // Ratings for specific aspects (e.g., food, environment, etc.)
+  image      String?  // Optional field to store the URL or path of the image
   userId     Int
   businessId Int
   createdAt  DateTime @default(now())
   business   Business @relation(fields: [businessId], references: [id])
   user       User     @relation(fields: [userId], references: [id])
-}
-
-model Keyword {
-  id         Int        @id @default(autoincrement())
-  name       String     @unique
-  businesses Business[] @relation("BusinessKeywords")
+  isVerified    Boolean?          @default(false)
 }
 
 model Tag {
@@ -88,21 +95,42 @@ model ViewInteraction {
   @@unique([businessId, date]) // Composite unique constraint
 }
 
-model LocationSearch {
-  id        Int       @id @default(autoincrement())
-  roundedLat Float    // Latitude rounded to 1 decimal
-  roundedLon Float    // Longitude rounded to 1 decimal
-  count      Int      @default(0)              // Track search count
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([roundedLat, roundedLon]) // Ensure unique rounded coordinate combinations
+model ItemSearch {
+  id        Int      @id @default(autoincrement())
+  item      String   @unique @db.VarChar(255) // Unique item
+  count     Int      @default(0) // Track search count
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model ItemSearch {
-  id        Int       @id @default(autoincrement())
-  item      String    @unique @db.VarChar(255) // Unique item
-  count     Int       @default(0)              // Track search count
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+model AdminRole {
+  id              Int        @id @default(autoincrement())
+  userId          String        @unique
+  password        String     @db.VarChar(255)
+  accessUser      Boolean    @default(false)
+  accessVendor    Boolean    @default(false)
+  accessAnalytics Boolean    @default(false)
+  accessReports   Boolean    @default(false)
+  accessMarket    Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Activity {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255) // Name of the activity
+  text      String   @db.Text // Description or details about the activity
+  createdAt DateTime @default(now()) // Timestamp when the activity occurred
+}
+
+model Report {
+  id           Int       @id @default(autoincrement())
+  reportedBy   User      @relation(fields: [userId], references: [id])
+  userId       Int
+  business     Business  @relation(fields: [businessId], references: [id])
+  businessId   Int
+  reason       String
+  description  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime? @updatedAt
 }
