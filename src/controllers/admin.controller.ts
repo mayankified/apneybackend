@@ -334,13 +334,13 @@ export const getTotalViewsByDay = async (
 export const listUsers = async (req: Request, res: Response): Promise<void> => {
   const cacheKey = "users";
   try {
-    const cachedData = await redisClient.get(cacheKey);
+    // const cachedData = await redisClient.get(cacheKey);
 
-    if (cachedData) {
-      console.log("Cache hit for listUsers");
-      res.status(200).json(JSON.parse(cachedData));
-      return;
-    }
+    // if (cachedData) {
+    //   console.log("Cache hit for listUsers");
+    //   res.status(200).json(JSON.parse(cachedData));
+    //   return;
+    // }
 
     const users = await prisma.user.findMany({
       select: {
@@ -349,6 +349,7 @@ export const listUsers = async (req: Request, res: Response): Promise<void> => {
         occupation: true,
         otherOccupation: true,
         email: true,
+        phone:true
       },
     });
     // Cache the data in Redis for 1 hour
@@ -375,14 +376,6 @@ export const listBusinesses = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const cacheKey = "listBusinesses"; // Unique cache key for businesses
-  const cachedData = await redisClient.get(cacheKey);
-
-  if (cachedData) {
-    console.log("Cache hit for listBusinesses");
-    res.status(200).json(JSON.parse(cachedData));
-    return;
-  }
   try {
     const businesses = await prisma.business.findMany({
       where: { email: { not: null } },
@@ -399,16 +392,12 @@ export const listBusinesses = async (
         documents: true,
         imageUrls: true,
         address: true,
+        createdAt:true,
         businessId: true,
       },
     });
     console.log(businesses);
     // Cache the data in Redis for 1 hour
-    await redisClient.setex(
-      cacheKey,
-      3600,
-      JSON.stringify({ success: true, data: businesses })
-    );
 
     res.status(200).json({
       success: true,
@@ -529,6 +518,10 @@ export const listAllBusinesses = async (
         businessName: true,
         city: true,
         category: true,
+        state: true,
+        businessId: true,
+        phoneNumber: true,
+        zipcode: true,
       },
       skip: offset,
       take: limitNumber,
@@ -688,12 +681,6 @@ export const fetchReviews = async (
 
   try {
     // Check if data exists in Redis cache
-    const cachedData = await redisClient.get(cacheKey);
-    if (cachedData) {
-      console.log("Cache hit for reviews");
-      res.status(200).json(JSON.parse(cachedData));
-      return;
-    }
 
     // Fetch reviews based on verification status
     const reviews = await prisma.review.findMany({
@@ -710,9 +697,6 @@ export const fetchReviews = async (
       },
       orderBy: { createdAt: "desc" },
     });
-
-    // Cache the fetched data
-    await redisClient.setex(cacheKey, 3600, JSON.stringify(reviews)); // Cache for 1 hour
 
     res.status(200).json({
       success: true,
@@ -1145,6 +1129,119 @@ export const listAllReviewsNoPagination = async (
     res.status(500).json({
       success: false,
       error: "Failed to fetch reviews",
+    });
+  }
+};
+
+/**
+ * Create a new task.
+ * Expected body: { task: string, deadline?: string, assignedAdminId?: number }
+ */
+export const createTask = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { task, deadline, assignedAdminId } = req.body;
+
+    if (!task) {
+      res.status(400).json({ error: "Task description is required" });
+      return;
+    }
+
+    const newTask = await prisma.task.create({
+      data: {
+        task,
+        deadline: deadline ? new Date(deadline) : null,
+        assignedAdminId: assignedAdminId || null,
+      },
+    });
+
+    // Optionally, log activity if the task is assigned to an admin
+    if (assignedAdminId) {
+      await createActivity(
+        "Task Created",
+        `Task "${task}" has been created and assigned to admin (ID: ${assignedAdminId}).`
+      );
+    } else {
+      await createActivity("Task Created", `Task "${task}" has been created.`);
+    }
+
+    res.status(201).json({ success: true, data: newTask });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to create task",
+      details: (error as Error).message,
+    });
+  }
+};
+
+/**
+ * Get tasks for a specific admin.
+ * Expected route parameter: /api/tasks/admin/:adminId
+ */
+export const getTasksForAdmin = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { adminId } = req.params;
+
+    if (!adminId) {
+      res.status(400).json({ error: "Admin ID is required" });
+      return;
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: { assignedAdminId: Number(adminId) },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json({ success: true, data: tasks });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to fetch tasks",
+      details: (error as Error).message,
+    });
+  }
+};
+
+/**
+ * Update the status (completed flag) of a task.
+ * Expected body: { taskId: number, completed: boolean }
+ */
+export const updateTaskStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { taskId, completed } = req.body;
+
+    if (taskId === undefined || completed === undefined) {
+      res.status(400).json({
+        error: "Task ID and completed status are required",
+      });
+      return;
+    }
+
+    const updatedTask = await prisma.task.update({
+      where: { id: Number(taskId) },
+      data: { completed: Boolean(completed) },
+    });
+
+    // Log activity about the status update
+    await createActivity(
+      "Task Updated",
+      `Task with ID ${taskId} was marked as ${
+        completed ? "completed" : "incomplete"
+      }.`
+    );
+
+    res.status(200).json({ success: true, data: updatedTask });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update task status",
+      details: (error as Error).message,
     });
   }
 };

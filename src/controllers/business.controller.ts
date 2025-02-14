@@ -409,15 +409,15 @@ export const getBusinessReviews = async (
     const cacheKey = `businessReviews:${businessId}`; // Unique cache key for reviews
 
     // Check if cached data exists
-    const cachedData = await redisClient.get(cacheKey);
-    if (cachedData) {
-      console.log("Cache hit for business reviews");
-      res.status(200).json({
-        success: true,
-        data: JSON.parse(cachedData),
-      });
-      return;
-    }
+    // const cachedData = await redisClient.get(cacheKey);
+    // if (cachedData) {
+    //   console.log("Cache hit for business reviews");
+    //   res.status(200).json({
+    //     success: true,
+    //     data: JSON.parse(cachedData),
+    //   });
+    //   return;
+    // }
 
     // Fetch reviews for the business
     const reviews = await prisma.review.findMany({

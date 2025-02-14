@@ -38,11 +38,6 @@ app.use(express.json());
 app.use(morgan("combined"));
 app.use(express.urlencoded({ extended: true }));
 // Rate limiting  
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
 
 app.get("/", (req: Request, res: Response) => {
   const appVersion = process.env.npm_package_version || "1.0.0";

@@ -22,6 +22,9 @@ import {
   fetchNotifications,
   listAllBusinessesNoPagination,
   listAllReviewsNoPagination,
+  createTask,
+  updateTaskStatus,
+  getTasksForAdmin,
 } from "../controllers/admin.controller";
 import { validateRequest } from "../middleware/validator";
 
@@ -72,6 +75,9 @@ router.get("/listbus",listAllBusinesses)
 router.post("/mail",sendEmailsToRecipients)
 router.post("/review/status", updateReviewStatus);
 router.post("/image/status", updateImageStatus);
+router.post("/task/add", createTask);
+router.post("/task/update",updateTaskStatus );  
+router.get("/task/list/:adminId", getTasksForAdmin);
 
 // **Route to fetch verified and non-verified reviews**
 router.get("/review/list", fetchReviews);
