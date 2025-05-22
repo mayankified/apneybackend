@@ -9,6 +9,7 @@ import {
   deleteUser,
 } from "../controllers/user.controller";
 import { validateRequest } from "../middleware/validator";
+import { authenticate } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.post(
       .isInt({ min: 1 })
       .withMessage("Business ID must be a valid integer"),
   ],
+  authenticate,
   validateRequest,
   addFavorite
 );
@@ -45,7 +47,8 @@ router.post(
     body("businessId")
       .isInt({ min: 1 })
       .withMessage("Business ID must be a valid integer"),
-  ],
+    ],
+    authenticate,
   validateRequest,
   removeFavorite
 );
@@ -85,6 +88,7 @@ router.post(
       .notEmpty()
       .withMessage("Review content cannot be empty"),
   ],
+  authenticate,
   validateRequest,
   postReview
 );
@@ -104,5 +108,5 @@ router.post(
   validateRequest,
   getUserReviews
 );
-router.post("/delete-account",validateRequest,deleteUser)
+router.post("/delete-account",authenticate,validateRequest,deleteUser)
 export default router;

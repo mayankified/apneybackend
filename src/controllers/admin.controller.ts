@@ -385,6 +385,9 @@ export const listBusinesses = async (
         city: true,
         state: true,
         email: true,
+        features:true,
+        category:true,
+        subcategory:true,
         phoneNumber: true,
         ownerName: true,
         isVerified: true,
@@ -394,6 +397,11 @@ export const listBusinesses = async (
         address: true,
         createdAt:true,
         businessId: true,
+        tags:{
+          select:{
+            name:true
+          }
+        }
       },
     });
     console.log(businesses);
@@ -410,6 +418,71 @@ export const listBusinesses = async (
     });
   }
 };
+
+export const editBusiness = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    // Destructure id and tags from request body along with the rest of the update data.
+    // The rest of the fields (updateData) will be used for updating the business.
+    const { id, tags, email, phoneNumber, ...updateData } = req.body;
+
+    // Even if email and phoneNumber are sent, ensure they are not updated.
+    // You could also delete them explicitly if they exist.
+    // delete updateData.email;
+    // delete updateData.phoneNumber;
+
+    // If updating tags (a many-to-many relation), use a nested write.
+    // This example assumes that each tag is passed as an object with a `name` property,
+    // and that the tags already exist. Adjust as needed for your use-case.
+    if (tags) {
+      updateData.tags = {
+        set: tags.map((tag: { name: string }) => ({ name: tag.name })),
+      };
+    }
+
+    const updatedBusiness = await prisma.business.update({
+      where: { id: Number(id) },
+      data: updateData,
+      select: {
+        id: true,
+        businessName: true,
+        city: true,
+        state: true,
+        email: true, // remains unchanged
+        features: true,
+        category: true,
+        subcategory: true,
+        phoneNumber: true, // remains unchanged
+        ownerName: true,
+        isVerified: true,
+        hasApplied: true,
+        documents: true,
+        imageUrls: true,
+        address: true,
+        createdAt: true,
+        businessId: true,
+        tags: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: updatedBusiness,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update business",
+      details: (error as Error).message,
+    });
+  }
+};
+
 
 export const getTopItems = async (
   req: Request,
@@ -1241,6 +1314,23 @@ export const updateTaskStatus = async (
   } catch (error) {
     res.status(500).json({
       error: "Failed to update task status",
+      details: (error as Error).message,
+    });
+  }
+};
+export const getAllSuggestions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    // Fetch all suggestions, ordered by creation date (most recent first)
+    const suggestions = await prisma.businessSuggestion.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    res.status(200).json(suggestions);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to fetch suggestions",
       details: (error as Error).message,
     });
   }

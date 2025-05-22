@@ -3,6 +3,8 @@
 import express from "express";
 import { query, body, param } from "express-validator";
 import {
+  addBusinessResponse,
+  createBusinessSuggestion,
   deleteBusiness,
   getBusinessAnalytics,
   getBusinessById,
@@ -16,6 +18,7 @@ import {
   updateImage,
 } from "../controllers/business.controller";
 import { validateRequest } from "../middleware/validator";
+import { authenticate } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
@@ -37,7 +40,7 @@ router.post(
       .isInt({ min: 1, max: 100 })
       .withMessage("Limit must be an integer between 1 and 100"),
 
-    // Search parameters
+  
     query("q").optional().isString().withMessage("Query must be a string"),
     query("category")
       .optional()
@@ -87,9 +90,11 @@ router.get(
 router.get("/busdata/:id", validateRequest, getBusinessStats);
 router.post("/togglestatus", validateRequest, toggleBusinessOpenState);
 router.get("/getreviews/:id", validateRequest, getBusinessReviews);
-router.get("/anal/:id", validateRequest, getBusinessAnalytics);
+router.get("/anal/:id",authenticate, validateRequest, getBusinessAnalytics);
 router.post("/search-suggestions",validateRequest, getSearchSuggestions);
-router.post("/delete-account",validateRequest,deleteBusiness)
-router.post("/update-image",validateRequest,updateImage)
+router.post("/delete-account",authenticate,validateRequest,deleteBusiness)
+router.post("/update-image",authenticate,validateRequest,updateImage)
 router.post("/getbusbycat",validateRequest,listBusinessesByCategory)
+router.post("/replyreview",validateRequest,addBusinessResponse)
+router.post("/addsuggestion",validateRequest,createBusinessSuggestion)
 export default router;

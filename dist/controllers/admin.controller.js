@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchNotifications = exports.listLatestActivities = exports.listImageBusinesses = exports.updateImageStatus = exports.getTopBusinessesByViews = exports.fetchReviews = exports.updateReviewStatus = exports.sendEmailsToRecipients = exports.listAllBusinesses = exports.listAdmins = exports.getTopItems = exports.listBusinesses = exports.listUsers = exports.getTotalViewsByDay = exports.deleteUser = exports.deleteBusiness = exports.verifyBusiness = exports.getBusinessCreatedCountByDay = exports.getUserCreatedCountByDay = void 0;
+exports.getAllSuggestions = exports.updateTaskStatus = exports.getTasksForAdmin = exports.createTask = exports.listAllReviewsNoPagination = exports.listAllBusinessesNoPagination = exports.fetchNotifications = exports.listLatestActivities = exports.listImageBusinesses = exports.updateImageStatus = exports.getTopBusinessesByViews = exports.fetchReviews = exports.updateReviewStatus = exports.sendEmailsToRecipients = exports.listAllBusinesses = exports.listAdmins = exports.getTopItems = exports.editBusiness = exports.listBusinesses = exports.listUsers = exports.getTotalViewsByDay = exports.deleteUser = exports.deleteBusiness = exports.verifyBusiness = exports.getBusinessCreatedCountByDay = exports.getUserCreatedCountByDay = void 0;
 const client_1 = require("@prisma/client");
 const redis_1 = require("../config/redis");
 const mail_1 = require("../utils/mail");
@@ -258,12 +258,12 @@ exports.getTotalViewsByDay = getTotalViewsByDay;
 const listUsers = async (req, res) => {
     const cacheKey = "users";
     try {
-        const cachedData = await redis_1.redisClient.get(cacheKey);
-        if (cachedData) {
-            console.log("Cache hit for listUsers");
-            res.status(200).json(JSON.parse(cachedData));
-            return;
-        }
+        // const cachedData = await redisClient.get(cacheKey);
+        // if (cachedData) {
+        //   console.log("Cache hit for listUsers");
+        //   res.status(200).json(JSON.parse(cachedData));
+        //   return;
+        // }
         const users = await prisma.user.findMany({
             select: {
                 id: true,
@@ -271,6 +271,7 @@ const listUsers = async (req, res) => {
                 occupation: true,
                 otherOccupation: true,
                 email: true,
+                phone: true
             },
         });
         // Cache the data in Redis for 1 hour
@@ -290,13 +291,6 @@ const listUsers = async (req, res) => {
 exports.listUsers = listUsers;
 // **List Businesses with limited info**
 const listBusinesses = async (req, res) => {
-    const cacheKey = "listBusinesses"; // Unique cache key for businesses
-    const cachedData = await redis_1.redisClient.get(cacheKey);
-    // if (cachedData) {
-    //   console.log("Cache hit for listBusinesses");
-    //   res.status(200).json(JSON.parse(cachedData));
-    //   return;
-    // }
     try {
         const businesses = await prisma.business.findMany({
             where: { email: { not: null } },
@@ -306,6 +300,9 @@ const listBusinesses = async (req, res) => {
                 city: true,
                 state: true,
                 email: true,
+                features: true,
+                category: true,
+                subcategory: true,
                 phoneNumber: true,
                 ownerName: true,
                 isVerified: true,
@@ -313,11 +310,17 @@ const listBusinesses = async (req, res) => {
                 documents: true,
                 imageUrls: true,
                 address: true,
+                createdAt: true,
+                businessId: true,
+                tags: {
+                    select: {
+                        name: true
+                    }
+                }
             },
         });
         console.log(businesses);
         // Cache the data in Redis for 1 hour
-        await redis_1.redisClient.setex(cacheKey, 3600, JSON.stringify({ success: true, data: businesses }));
         res.status(200).json({
             success: true,
             data: businesses,
@@ -331,6 +334,64 @@ const listBusinesses = async (req, res) => {
     }
 };
 exports.listBusinesses = listBusinesses;
+const editBusiness = async (req, res) => {
+    try {
+        // Destructure id and tags from request body along with the rest of the update data.
+        // The rest of the fields (updateData) will be used for updating the business.
+        const { id, tags, email, phoneNumber, ...updateData } = req.body;
+        // Even if email and phoneNumber are sent, ensure they are not updated.
+        // You could also delete them explicitly if they exist.
+        // delete updateData.email;
+        // delete updateData.phoneNumber;
+        // If updating tags (a many-to-many relation), use a nested write.
+        // This example assumes that each tag is passed as an object with a `name` property,
+        // and that the tags already exist. Adjust as needed for your use-case.
+        if (tags) {
+            updateData.tags = {
+                set: tags.map((tag) => ({ name: tag.name })),
+            };
+        }
+        const updatedBusiness = await prisma.business.update({
+            where: { id: Number(id) },
+            data: updateData,
+            select: {
+                id: true,
+                businessName: true,
+                city: true,
+                state: true,
+                email: true, // remains unchanged
+                features: true,
+                category: true,
+                subcategory: true,
+                phoneNumber: true, // remains unchanged
+                ownerName: true,
+                isVerified: true,
+                hasApplied: true,
+                documents: true,
+                imageUrls: true,
+                address: true,
+                createdAt: true,
+                businessId: true,
+                tags: {
+                    select: {
+                        name: true,
+                    },
+                },
+            },
+        });
+        res.status(200).json({
+            success: true,
+            data: updatedBusiness,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Failed to update business",
+            details: error.message,
+        });
+    }
+};
+exports.editBusiness = editBusiness;
 const getTopItems = async (req, res) => {
     const cacheKey = "topItems"; // Unique cache key for top items
     try {
@@ -421,6 +482,10 @@ const listAllBusinesses = async (req, res) => {
                 businessName: true,
                 city: true,
                 category: true,
+                state: true,
+                businessId: true,
+                phoneNumber: true,
+                zipcode: true,
             },
             skip: offset,
             take: limitNumber,
@@ -547,12 +612,6 @@ const fetchReviews = async (req, res) => {
     const cacheKey = isVerified === "true" ? "verifiedReviews" : "nonVerifiedReviews";
     try {
         // Check if data exists in Redis cache
-        const cachedData = await redis_1.redisClient.get(cacheKey);
-        if (cachedData) {
-            console.log("Cache hit for reviews");
-            res.status(200).json(JSON.parse(cachedData));
-            return;
-        }
         // Fetch reviews based on verification status
         const reviews = await prisma.review.findMany({
             where: { isVerified: isVerified === "true" },
@@ -568,8 +627,6 @@ const fetchReviews = async (req, res) => {
             },
             orderBy: { createdAt: "desc" },
         });
-        // Cache the fetched data
-        await redis_1.redisClient.setex(cacheKey, 3600, JSON.stringify(reviews)); // Cache for 1 hour
         res.status(200).json({
             success: true,
             data: reviews,
@@ -663,8 +720,10 @@ const updateImageStatus = async (req, res) => {
         if (action === "verify") {
             const updatedBusiness = await prisma.business.update({
                 where: { id: businessId },
-                data: { isImageUpdated: true }, // ✅ Corrected to keep the image verified
+                data: { isImageUpdated: false, isVerified: true }, // ✅ Corrected to keep the image verified
             });
+            business.email &&
+                (0, mail_1.sendEmail)(business.email, "Image Verified", "Your image has been verified.");
             // Log activity
             await (0, activity_1.createActivity)("Image Verified", `Admin ${adminId} verified the image for business "${business.businessName}" (ID: ${business.id})`);
             res.status(200).json({
@@ -705,14 +764,6 @@ const updateImageStatus = async (req, res) => {
 };
 exports.updateImageStatus = updateImageStatus;
 const listImageBusinesses = async (req, res) => {
-    const cacheKey = "verifiedBusinesses"; // Unique cache key for businesses with images updated
-    // Check if data exists in Redis cache
-    const cachedData = await redis_1.redisClient.get(cacheKey);
-    if (cachedData) {
-        console.log("Cache hit for verified businesses");
-        res.status(200).json(JSON.parse(cachedData));
-        return;
-    }
     try {
         const businesses = await prisma.business.findMany({
             where: { isImageUpdated: true },
@@ -733,7 +784,6 @@ const listImageBusinesses = async (req, res) => {
         });
         console.log("Fetched businesses from database:", businesses);
         // Cache the data in Redis for 1 hour (3600 seconds)
-        await redis_1.redisClient.setex(cacheKey, 3600, JSON.stringify({ success: true, data: businesses }));
         res.status(200).json({
             success: true,
             data: businesses,
@@ -802,3 +852,256 @@ const fetchNotifications = async (req, res) => {
     }
 };
 exports.fetchNotifications = fetchNotifications;
+const listAllBusinessesNoPagination = async (req, res) => {
+    try {
+        // Extract query parameters for filtering (all are optional)
+        const { category, city, state, isVerified, fromDate, toDate } = req.query;
+        // Build the filter object dynamically
+        const filters = {};
+        if (city) {
+            filters.city = city;
+        }
+        if (category) {
+            filters.category = category;
+        }
+        if (state) {
+            filters.state = state;
+        }
+        if (isVerified) {
+            // Convert the query parameter to a boolean
+            filters.isVerified = isVerified === "true";
+        }
+        if (fromDate && toDate) {
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+            // Adjust the "to" date to include the entire day
+            to.setHours(23, 59, 59, 999);
+            filters.createdAt = {
+                gte: from,
+                lte: to,
+            };
+        }
+        // Fetch all businesses matching the filters (without pagination)
+        const businesses = await prisma.business.findMany({
+            where: filters,
+            select: {
+                id: true,
+                ownerName: true,
+                email: true,
+                businessName: true,
+                password: true, // Be cautious about returning sensitive fields (e.g., password)
+                businessId: true,
+                address: true,
+                longitude: true,
+                latitude: true,
+                rating: true,
+                // imageUrls is excluded
+                isOpen: true,
+                isVerified: true,
+                description: true,
+                phoneNumber: true,
+                websiteUrl: true,
+                createdAt: true,
+                updatedAt: true,
+                city: true,
+                country: true,
+                streetaddress: true,
+                state: true,
+                zipcode: true,
+                category: true,
+            },
+        });
+        // Return the result as JSON
+        res.status(200).json({
+            success: true,
+            data: businesses,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching businesses:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to fetch businesses",
+        });
+    }
+};
+exports.listAllBusinessesNoPagination = listAllBusinessesNoPagination;
+const listAllReviewsNoPagination = async (req, res) => {
+    try {
+        // Extract query parameters (all optional)
+        const { isVerified, minRating, maxRating, fromDate, toDate } = req.query;
+        // Build the filter object dynamically
+        const filters = {};
+        if (isVerified) {
+            // Convert the query string to a boolean
+            filters.isVerified = isVerified === "true";
+        }
+        if (minRating || maxRating) {
+            filters.rating = {};
+            if (minRating) {
+                filters.rating.gte = parseInt(minRating, 10);
+            }
+            if (maxRating) {
+                filters.rating.lte = parseInt(maxRating, 10);
+            }
+        }
+        if (fromDate && toDate) {
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+            // Adjust "to" date to include the entire day
+            to.setHours(23, 59, 59, 999);
+            filters.createdAt = {
+                gte: from,
+                lte: to,
+            };
+        }
+        // Fetch all reviews matching the filters (without pagination)
+        // Fetch all reviews matching the filters along with related user and business data.
+        const reviews = await prisma.review.findMany({
+            where: filters,
+            include: {
+                user: {
+                    select: {
+                        name: true, // Fetch username
+                    },
+                },
+                business: {
+                    select: {
+                        id: true, // Business ID
+                        businessName: true, // Business Name
+                    },
+                },
+            },
+        });
+        // Flatten the response so that the related fields appear at the top level.
+        const flattenedReviews = reviews.map((review) => ({
+            id: review.id,
+            content: review.content,
+            rating: review.rating,
+            createdAt: review.createdAt,
+            isVerified: review.isVerified,
+            userId: review.userId,
+            businessId: review.businessId,
+            username: review.user?.name,
+            businessName: review.business?.businessName,
+        }));
+        // Return the result as JSON
+        res.status(200).json({
+            success: true,
+            data: flattenedReviews,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to fetch reviews",
+        });
+    }
+};
+exports.listAllReviewsNoPagination = listAllReviewsNoPagination;
+/**
+ * Create a new task.
+ * Expected body: { task: string, deadline?: string, assignedAdminId?: number }
+ */
+const createTask = async (req, res) => {
+    try {
+        const { task, deadline, assignedAdminId } = req.body;
+        if (!task) {
+            res.status(400).json({ error: "Task description is required" });
+            return;
+        }
+        const newTask = await prisma.task.create({
+            data: {
+                task,
+                deadline: deadline ? new Date(deadline) : null,
+                assignedAdminId: assignedAdminId || null,
+            },
+        });
+        // Optionally, log activity if the task is assigned to an admin
+        if (assignedAdminId) {
+            await (0, activity_1.createActivity)("Task Created", `Task "${task}" has been created and assigned to admin (ID: ${assignedAdminId}).`);
+        }
+        else {
+            await (0, activity_1.createActivity)("Task Created", `Task "${task}" has been created.`);
+        }
+        res.status(201).json({ success: true, data: newTask });
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Failed to create task",
+            details: error.message,
+        });
+    }
+};
+exports.createTask = createTask;
+/**
+ * Get tasks for a specific admin.
+ * Expected route parameter: /api/tasks/admin/:adminId
+ */
+const getTasksForAdmin = async (req, res) => {
+    try {
+        const { adminId } = req.params;
+        if (!adminId) {
+            res.status(400).json({ error: "Admin ID is required" });
+            return;
+        }
+        const tasks = await prisma.task.findMany({
+            where: { assignedAdminId: Number(adminId) },
+            orderBy: { createdAt: "desc" },
+        });
+        res.status(200).json({ success: true, data: tasks });
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Failed to fetch tasks",
+            details: error.message,
+        });
+    }
+};
+exports.getTasksForAdmin = getTasksForAdmin;
+/**
+ * Update the status (completed flag) of a task.
+ * Expected body: { taskId: number, completed: boolean }
+ */
+const updateTaskStatus = async (req, res) => {
+    try {
+        const { taskId, completed } = req.body;
+        if (taskId === undefined || completed === undefined) {
+            res.status(400).json({
+                error: "Task ID and completed status are required",
+            });
+            return;
+        }
+        const updatedTask = await prisma.task.update({
+            where: { id: Number(taskId) },
+            data: { completed: Boolean(completed) },
+        });
+        // Log activity about the status update
+        await (0, activity_1.createActivity)("Task Updated", `Task with ID ${taskId} was marked as ${completed ? "completed" : "incomplete"}.`);
+        res.status(200).json({ success: true, data: updatedTask });
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Failed to update task status",
+            details: error.message,
+        });
+    }
+};
+exports.updateTaskStatus = updateTaskStatus;
+const getAllSuggestions = async (req, res) => {
+    try {
+        // Fetch all suggestions, ordered by creation date (most recent first)
+        const suggestions = await prisma.businessSuggestion.findMany({
+            orderBy: { createdAt: "desc" },
+        });
+        res.status(200).json(suggestions);
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Failed to fetch suggestions",
+            details: error.message,
+        });
+    }
+};
+exports.getAllSuggestions = getAllSuggestions;

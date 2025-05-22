@@ -30,10 +30,17 @@ router.get("/listbus", admin_controller_1.listAllBusinesses);
 router.post("/mail", admin_controller_1.sendEmailsToRecipients);
 router.post("/review/status", admin_controller_1.updateReviewStatus);
 router.post("/image/status", admin_controller_1.updateImageStatus);
+router.post("/task/add", admin_controller_1.createTask);
+router.post("/task/update", admin_controller_1.updateTaskStatus);
+router.post("/business/update", admin_controller_1.editBusiness);
+router.get("/task/list/:adminId", admin_controller_1.getTasksForAdmin);
 // **Route to fetch verified and non-verified reviews**
 router.get("/review/list", admin_controller_1.fetchReviews);
 router.get("/image/list", admin_controller_1.listImageBusinesses);
 router.get("/top-bus", admin_controller_1.getTopBusinessesByViews);
 router.get("/activity", admin_controller_1.listLatestActivities);
 router.get("/notification", admin_controller_1.fetchNotifications);
+router.get("/exportbus", admin_controller_1.listAllBusinessesNoPagination);
+router.get("/exportrev", admin_controller_1.listAllReviewsNoPagination);
+router.get("/getsuggestions", admin_controller_1.getAllSuggestions);
 exports.default = router;

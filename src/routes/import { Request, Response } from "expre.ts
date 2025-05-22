@@ -14,122 +14,91 @@ const prisma = new PrismaClient();
 export const listBusinesses = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
-      query: text = "",
+      query: text = "", // search text
       longitude,
       latitude,
     } = req.query;
 
+    // Convert values to proper types
     const searchText = typeof text === "string" ? text.trim() : "";
-    const userLongitude = Number(latitude);  // still swapped
+    const userLongitude = Number(latitude); // Swapped in your original code
     const userLatitude = Number(longitude);
 
+    // Validate user coordinates
     if (isNaN(userLongitude) || isNaN(userLatitude)) {
       res.status(400).json({ error: "Invalid longitude or latitude" });
       return;
     }
+    
 
-    // Step 1: Try to match full phrase to a tag
-    const fuzzyMatchTag = await prisma.$queryRawUnsafe<any[]>(`
-      SELECT t."id", t."name"
-      FROM "Tag" t
-      WHERE REPLACE(LOWER(t."name"), ' ', '') % REPLACE(LOWER($1), ' ', '')
-         OR t."name" ILIKE '%' || $1 || '%'
-      LIMIT 1
-    `, searchText);
+    console.log(
+      "Received Coordinates (Swapped): Lat:",
+      userLatitude,
+      "Long:",
+      userLongitude
+    );
 
-    if (fuzzyMatchTag.length > 0) {
-      const matchedTag = fuzzyMatchTag[0];
-      const radiusInMiles = 50;
-      const latOffset = radiusInMiles / 69;
-      const lngOffset = radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
-
-      const minLat = userLatitude - latOffset;
-      const maxLat = userLatitude + latOffset;
-      const minLng = userLongitude - lngOffset;
-      const maxLng = userLongitude + lngOffset;
-
-      // 🏪 Fetch businesses linked to this tag (within 50mi bbox)
-      const tagBusinesses = await prisma.$queryRawUnsafe<any[]>(`
-        SELECT b.*
-        FROM "Business" b
-        JOIN "_BusinessTags" bt ON bt."A" = b.id
-        WHERE bt."B" = $1
-          AND b."longitude" BETWEEN $2 AND $3
-          AND b."latitude" BETWEEN $4 AND $5
-          AND (b."email" IS NULL OR (b."email" IS NOT NULL AND b."isVerified" = TRUE))
-      `, matchedTag.id,minLat, maxLat, minLng, maxLng);
-
-      // 📏 Filter + sort by distance
-      const businessesWithDistance = tagBusinesses
-        .map((b) => {
-          const distanceInMeters = getDistance(
-            { latitude: userLatitude, longitude: userLongitude },
-            { latitude: b.longitude, longitude: b.latitude }
-          );
-          const distanceInMiles = distanceInMeters / 1609.34;
-          return {
-            ...b,
-            distance: Number(distanceInMiles.toFixed(2)),
-          };
-        })
-        .filter((b) => b.distance <= radiusInMiles)
-        .sort((a, b) => a.distance - b.distance);
-
-      res.status(200).json({
-        foundExactTag: true,
-        tagMatch: matchedTag.name,
-        total: businessesWithDistance.length,
-        businesses: businessesWithDistance,
-        matchingKeywords: [matchedTag.name], // just 1 tag matched
-      });
-    }
-
-    // Track item search (normal path)
+    // -- Track the search text in 'itemSearch' table, as you had --
     await prisma.itemSearch.upsert({
       where: { item: searchText },
       update: { count: { increment: 1 } },
       create: { item: searchText, count: 1 },
     });
 
-    // Run full raw query if no tag matched
+    // -- 50-mile bounding box --
     const radiusInMiles = 50;
-    const latOffset = radiusInMiles / 69;
-    const lngOffset = radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
+    const latOffset = radiusInMiles / 69; // 1 degree latitude ~ 69 miles
+    const lngOffset =
+      radiusInMiles / (69 * Math.cos(userLatitude * (Math.PI / 180)));
 
     const minLat = userLatitude - latOffset;
     const maxLat = userLatitude + latOffset;
     const minLng = userLongitude - lngOffset;
     const maxLng = userLongitude + lngOffset;
 
+    console.log("Bounding Box:", { minLat, maxLat, minLng, maxLng });
+
+    // ----------------------------------------------------------------
+    // 1) Use a RAW query to harness trigram matches on businessName, category, and tags.
+    // 2) Use LEFT JOIN on tags so we don't exclude businesses with no tags.
+    // 3) The condition checks bounding box + fuzzy/trigram matches + verification logic.
+    // ----------------------------------------------------------------
+
     const rawQuery = `
-      SELECT DISTINCT b.*
-      FROM "Business" b
-      LEFT JOIN "_BusinessTags" tb ON tb."A" = b.id
-      LEFT JOIN "Tag" t ON t.id = tb."B"
-      WHERE 
-        b."longitude" BETWEEN $1 AND $2
-        AND b."latitude"  BETWEEN $3 AND $4
-        AND (b."email" IS NULL OR (b."email" IS NOT NULL AND b."isVerified" = TRUE))
-        AND (
-          b."businessName" ILIKE '%' || $5 || '%' OR b."businessName" % $5
-          OR b."category" ILIKE '%' || $5 || '%' OR b."category" % $5
-          OR t."name" ILIKE '%' || $5 || '%' OR t."name" % $5
-          OR REPLACE(LOWER(b."businessName"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-          OR REPLACE(LOWER(b."businessName"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-          OR REPLACE(LOWER(b."category"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-          OR REPLACE(LOWER(b."category"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-          OR REPLACE(LOWER(t."name"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-          OR REPLACE(LOWER(t."name"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-        )
+     
+        SELECT DISTINCT b.*
+FROM "Business" b
+LEFT JOIN "_BusinessTags" tb ON tb."A" = b.id
+LEFT JOIN "Tag" t ON t.id = tb."B"
+WHERE 
+  b."longitude" BETWEEN $1 AND $2
+  AND b."latitude"  BETWEEN $3 AND $4
+  AND (b."email" IS NULL OR (b."email" IS NOT NULL AND b."isVerified" = TRUE))
+  AND (
+    b."businessName" ILIKE '%' || $5 || '%'
+    OR b."businessName" % $5
+    OR b."category" ILIKE '%' || $5 || '%'
+    OR b."category" % $5
+    OR t."name" ILIKE '%' || $5 || '%'
+    OR t."name" % $5
+  )
+
     `;
 
+    // Execute raw query
+    // `$queryRaw` strongly typed => pass placeholders in array
     const businessesRaw = await prisma.$queryRawUnsafe<any[]>(rawQuery, minLat, maxLat, minLng, maxLng, searchText);
 
+    // ----------------------------------------------------------------
+    // 2) Filter out businesses outside the 50-mile radius (geolib distance),
+    //    attach distance, and then sort by distance ascending.
+    //    (We do this after the raw query, since bounding box is just an approx.)
+    // ----------------------------------------------------------------
     const businessesWithDistance = businessesRaw
       .map((b) => {
         const distanceInMeters = getDistance(
           { latitude: userLatitude, longitude: userLongitude },
-          { latitude: b.longitude, longitude: b.latitude }
+          { latitude: b.longitude, longitude: b.latitude } // note your "swapped" naming
         );
         const distanceInMiles = distanceInMeters / 1609.34;
         return {
@@ -140,6 +109,10 @@ export const listBusinesses = async (req: Request, res: Response): Promise<void>
       .filter((b) => b.distance <= radiusInMiles)
       .sort((a, b) => a.distance - b.distance);
 
+    // ----------------------------------------------------------------
+    // 3) Optionally, get up to 5 "matching keywords" from your Tag table
+    //    using trigram + ILIKE similarly if you want fuzzy tag suggestions.
+    // ----------------------------------------------------------------
     const matchingKeywords = await prisma.$queryRawUnsafe<any[]>(`
       SELECT t."name"
       FROM "Tag" t
@@ -148,24 +121,34 @@ export const listBusinesses = async (req: Request, res: Response): Promise<void>
       LIMIT 5
     `, searchText);
 
-    res.status(200).json({
-      foundExactTag: false,
-      total: businessesWithDistance.length,
-      businesses: businessesWithDistance,
-      matchingKeywords: matchingKeywords.map((k) => k.name),
-    });
+    const keywordNames = matchingKeywords.map((k) => k.name);
+    const totalBusinesses = businessesWithDistance.length;
 
-  } catch (error: any) {
-    console.error("Error in search:", error.message || error);
-    res.status(500).json({ error: "Internal server error", details: error.message });
+    res.status(200).json({
+      total: totalBusinesses,
+      businesses: businessesWithDistance,
+      matchingKeywords: keywordNames,
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error("Error fetching businesses:", error.message);
+     res
+        .status(500)
+        .json({ error: "Error fetching businesses", details: error.message });
+
+        return 
+    }
+    res.status(500).json({ error: "Unknown error occurred" });
   }
 };
 
-
-// **Search Suggestions API (tags + business names)**
-export const searchSuggestions = async (req: Request, res: Response): Promise<void> => {
+// **Search Suggestions API (with body text input)**
+export const searchSuggestions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
-    const { text = "" } = req.body;
+    const { text = "" } = req.body; // Extract `text` from the request body
 
     if (typeof text !== "string" || text.trim() === "") {
       res.status(400).json({
@@ -174,12 +157,12 @@ export const searchSuggestions = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Fetch top 5 matching tags
-    const tags = await prisma.tag.findMany({
+    // Fetch keywords matching the search text (case-insensitive)
+    const suggestions = await prisma.tag.findMany({
       where: {
         name: {
           contains: text.trim(),
-          mode: "insensitive",
+          mode: "insensitive", // Case-insensitive search
         },
       },
       select: {
@@ -187,51 +170,16 @@ export const searchSuggestions = async (req: Request, res: Response): Promise<vo
         name: true,
       },
       orderBy: {
-        name: "asc",
+        name: "asc", // Sort suggestions alphabetically
       },
-      take: 5,
+      take: 5, // Limit to 5 suggestions
     });
 
-    // Fetch top 2 matching businesses
-    const businesses = await prisma.business.findMany({
-      where: {
-        businessName: {
-          contains: text.trim(),
-          mode: "insensitive",
-        },
-      },
-      select: {
-        id: true,
-        businessName: true,
-        city: true,
-      imageUrls: true, // Fetching the array of image URLs
-      },
-      orderBy: {
-        businessName: "asc",
-      },
-      take: 2,
-    });
-    const suggestions = [
-      ...tags.map((tag) => ({
-        id: `tag-${tag.id}`,
-        name: tag.name,
-        type: "tag", // To differentiate between tags and businesses if needed
-      })),
-      ...businesses.map((business) => ({
-        id: business.id,
-        name: business.businessName,
-        city: business.city,
-        image: business.imageUrls?.length ? business.imageUrls[0] : null, // Pick first image
-        type: "business",
-      })),
-    ];
-
-    // Format the response
+    // Response
     res.status(200).json({
       text,
-      totalTags: tags.length,
-      totalBusinesses: businesses.length,
-      suggestions, // Single combined array
+      totalSuggestions: suggestions.length,
+      suggestions,
     });
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -307,13 +255,6 @@ export const getBusinessById = async (
             },
           },
         },
-        tags:{
-          select:{
-            name:true,
-            id:true
-          },
-          take:10
-        }
       },
     });
 
@@ -658,37 +599,37 @@ export const getSearchSuggestions = async (
   }
 };
 
-  // **Delete Business**
-  export const deleteBusiness = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
-    try {
-      const { businessId } = req.body;
-      if (!businessId) {
-        res.status(400).json({ error: "Business ID is required" });
-        return;
-      }
-      await prisma.review.deleteMany({
-        where: { businessId: businessId },
-      });
-      await prisma.viewInteraction.deleteMany({
-        where: { businessId: businessId },
-      });
-      const deletedBusiness = await prisma.business.delete({
-        where: { id: businessId },
-      });
-
-      res
-        .status(200)
-        .json({ message: "Business deleted successfully", deletedBusiness });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to delete business",
-        details: (error as Error).message,
-      });
+// **Delete Business**
+export const deleteBusiness = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { businessId } = req.body;
+    if (!businessId) {
+      res.status(400).json({ error: "Business ID is required" });
+      return;
     }
-  };
+    await prisma.review.deleteMany({
+      where: { businessId: businessId },
+    });
+    await prisma.viewInteraction.deleteMany({
+      where: { businessId: businessId },
+    });
+    const deletedBusiness = await prisma.business.delete({
+      where: { id: businessId },
+    });
+
+    res
+      .status(200)
+      .json({ message: "Business deleted successfully", deletedBusiness });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete business",
+      details: (error as Error).message,
+    });
+  }
+};
 
 export const updateImage = async (
   req: Request,
@@ -891,66 +832,5 @@ export const listBusinessesByCategory = async (
   } catch (error) {
     console.error("Error fetching businesses:", error);
     res.status(500).json({ error: "Error fetching businesses" });
-  }
-};
-
-// **Add/Update Business Response in a Review**
-export const addBusinessResponse = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
-    const { reviewId, businessResponse } = req.body;
-
-    // Validate input
-    if (!reviewId || !businessResponse) {
-      res
-        .status(400)
-        .json({ error: "Review ID and business response are required." });
-      return;
-    }
-
-    // Update the review with the business response
-    const updatedReview = await prisma.review.update({
-      where: { id: reviewId },
-      data: {
-        businessresponse: businessResponse,
-      },
-    });
-
-    res
-      .status(200)
-      .json({ message: "Business response added successfully", updatedReview });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to add business response",
-      details: (error as Error).message,
-    });
-  }
-};
-export const createBusinessSuggestion = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
-    const { item, location } = req.body;
-    if (!item || !location) {
-      res.status(400).json({ error: "Business name and location are required" });
-      return;
-    }
-    const suggestion = await prisma.businessSuggestion.create({
-      data: {
-        businessName: item,
-        location: location,
-      },
-    });
-    res
-      .status(200)
-      .json({ message: "Suggestion submitted successfully", suggestion });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to submit suggestion",
-      details: (error as Error).message,
-    });
   }
 };

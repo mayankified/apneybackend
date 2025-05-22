@@ -24,7 +24,6 @@ router.post("/list", [
         .optional()
         .isInt({ min: 1, max: 100 })
         .withMessage("Limit must be an integer between 1 and 100"),
-    // Search parameters
     (0, express_validator_1.query)("q").optional().isString().withMessage("Query must be a string"),
     (0, express_validator_1.query)("category")
         .optional()
@@ -67,4 +66,6 @@ router.post("/search-suggestions", validator_1.validateRequest, business_control
 router.post("/delete-account", validator_1.validateRequest, business_controller_1.deleteBusiness);
 router.post("/update-image", validator_1.validateRequest, business_controller_1.updateImage);
 router.post("/getbusbycat", validator_1.validateRequest, business_controller_1.listBusinessesByCategory);
+router.post("/replyreview", validator_1.validateRequest, business_controller_1.addBusinessResponse);
+router.post("/addsuggestion", validator_1.validateRequest, business_controller_1.createBusinessSuggestion);
 exports.default = router;

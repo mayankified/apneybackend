@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBusinessSuggestion = exports.addBusinessResponse = exports.listBusinessesByCategory = exports.updateImage = exports.deleteBusiness = exports.getSearchSuggestions = exports.getBusinessAnalytics = exports.getBusinessReviews = exports.toggleBusinessOpenState = exports.getBusinessStats = exports.getBusinessById = exports.searchSuggestions = exports.listBusinesses = void 0;
+exports.listBusinessesByCategory = exports.updateImage = exports.deleteBusiness = exports.getSearchSuggestions = exports.getBusinessAnalytics = exports.getBusinessReviews = exports.toggleBusinessOpenState = exports.getBusinessStats = exports.getBusinessById = exports.searchSuggestions = exports.listBusinesses = void 0;
 const client_1 = require("@prisma/client");
 const geolib_1 = require("geolib");
 const redis_1 = require("../config/redis");
@@ -37,6 +37,11 @@ const listBusinesses = async (req, res) => {
         const minLng = userLongitude - lngOffset;
         const maxLng = userLongitude + lngOffset;
         console.log("Bounding Box:", { minLat, maxLat, minLng, maxLng });
+        // ----------------------------------------------------------------
+        // 1) Use a RAW query to harness trigram matches on businessName, category, and tags.
+        // 2) Use LEFT JOIN on tags so we don't exclude businesses with no tags.
+        // 3) The condition checks bounding box + fuzzy/trigram matches + verification logic.
+        // ----------------------------------------------------------------
         const rawQuery = `
      
         SELECT DISTINCT b.*
@@ -47,28 +52,14 @@ WHERE
   b."longitude" BETWEEN $1 AND $2
   AND b."latitude"  BETWEEN $3 AND $4
   AND (b."email" IS NULL OR (b."email" IS NOT NULL AND b."isVerified" = TRUE))
- AND (
-  -- Normal substring match & trigram:
-  b."businessName" ILIKE '%' || $5 || '%'
-  OR b."businessName" % $5
-
-  OR b."category" ILIKE '%' || $5 || '%'
-  OR b."category" % $5
-
-  OR t."name" ILIKE '%' || $5 || '%'
-  OR t."name" % $5
-
-  -- 1) STRIP SPACES + LOWERCASE on both sides for "tenkingz" vs "Ten Kingz"
-  OR REPLACE(LOWER(b."businessName"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-  OR REPLACE(LOWER(b."businessName"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-
-  OR REPLACE(LOWER(b."category"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-  OR REPLACE(LOWER(b."category"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-
-  OR REPLACE(LOWER(t."name"), ' ', '') ILIKE '%' || REPLACE(LOWER($5), ' ', '') || '%'
-  OR REPLACE(LOWER(t."name"), ' ', '') % REPLACE(LOWER($5), ' ', '')
-)
-
+  AND (
+    b."businessName" ILIKE '%' || $5 || '%'
+    OR b."businessName" % $5
+    OR b."category" ILIKE '%' || $5 || '%'
+    OR b."category" % $5
+    OR t."name" ILIKE '%' || $5 || '%'
+    OR t."name" % $5
+  )
 
     `;
         // Execute raw query
@@ -122,22 +113,22 @@ WHERE
     }
 };
 exports.listBusinesses = listBusinesses;
-// **Search Suggestions API (tags + business names)**
+// **Search Suggestions API (with body text input)**
 const searchSuggestions = async (req, res) => {
     try {
-        const { text = "" } = req.body;
+        const { text = "" } = req.body; // Extract `text` from the request body
         if (typeof text !== "string" || text.trim() === "") {
             res.status(400).json({
                 error: "Text parameter is required and must be a non-empty string",
             });
             return;
         }
-        // Fetch top 5 matching tags
-        const tags = await prisma.tag.findMany({
+        // Fetch keywords matching the search text (case-insensitive)
+        const suggestions = await prisma.tag.findMany({
             where: {
                 name: {
                     contains: text.trim(),
-                    mode: "insensitive",
+                    mode: "insensitive", // Case-insensitive search
                 },
             },
             select: {
@@ -145,49 +136,15 @@ const searchSuggestions = async (req, res) => {
                 name: true,
             },
             orderBy: {
-                name: "asc",
+                name: "asc", // Sort suggestions alphabetically
             },
-            take: 5,
+            take: 5, // Limit to 5 suggestions
         });
-        // Fetch top 2 matching businesses
-        const businesses = await prisma.business.findMany({
-            where: {
-                businessName: {
-                    contains: text.trim(),
-                    mode: "insensitive",
-                },
-            },
-            select: {
-                id: true,
-                businessName: true,
-                city: true,
-                imageUrls: true, // Fetching the array of image URLs
-            },
-            orderBy: {
-                businessName: "asc",
-            },
-            take: 2,
-        });
-        const suggestions = [
-            ...tags.map((tag) => ({
-                id: `tag-${tag.id}`,
-                name: tag.name,
-                type: "tag", // To differentiate between tags and businesses if needed
-            })),
-            ...businesses.map((business) => ({
-                id: business.id,
-                name: business.businessName,
-                city: business.city,
-                image: business.imageUrls?.length ? business.imageUrls[0] : null, // Pick first image
-                type: "business",
-            })),
-        ];
-        // Format the response
+        // Response
         res.status(200).json({
             text,
-            totalTags: tags.length,
-            totalBusinesses: businesses.length,
-            suggestions, // Single combined array
+            totalSuggestions: suggestions.length,
+            suggestions,
         });
     }
     catch (error) {
@@ -255,13 +212,6 @@ const getBusinessById = async (req, res) => {
                         },
                     },
                 },
-                tags: {
-                    select: {
-                        name: true,
-                        id: true
-                    },
-                    take: 10
-                }
             },
         });
         if (!business) {
@@ -759,58 +709,3 @@ const listBusinessesByCategory = async (req, res) => {
     }
 };
 exports.listBusinessesByCategory = listBusinessesByCategory;
-// **Add/Update Business Response in a Review**
-const addBusinessResponse = async (req, res) => {
-    try {
-        const { reviewId, businessResponse } = req.body;
-        // Validate input
-        if (!reviewId || !businessResponse) {
-            res
-                .status(400)
-                .json({ error: "Review ID and business response are required." });
-            return;
-        }
-        // Update the review with the business response
-        const updatedReview = await prisma.review.update({
-            where: { id: reviewId },
-            data: {
-                businessresponse: businessResponse,
-            },
-        });
-        res
-            .status(200)
-            .json({ message: "Business response added successfully", updatedReview });
-    }
-    catch (error) {
-        res.status(500).json({
-            error: "Failed to add business response",
-            details: error.message,
-        });
-    }
-};
-exports.addBusinessResponse = addBusinessResponse;
-const createBusinessSuggestion = async (req, res) => {
-    try {
-        const { item, location } = req.body;
-        if (!item || !location) {
-            res.status(400).json({ error: "Business name and location are required" });
-            return;
-        }
-        const suggestion = await prisma.businessSuggestion.create({
-            data: {
-                businessName: item,
-                location: location,
-            },
-        });
-        res
-            .status(200)
-            .json({ message: "Suggestion submitted successfully", suggestion });
-    }
-    catch (error) {
-        res.status(500).json({
-            error: "Failed to submit suggestion",
-            details: error.message,
-        });
-    }
-};
-exports.createBusinessSuggestion = createBusinessSuggestion;

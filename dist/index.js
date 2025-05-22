@@ -8,7 +8,6 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const morgan_1 = __importDefault(require("morgan"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const routes_1 = __importDefault(require("./routes"));
 const logger_1 = __importDefault(require("./utils/logger"));
 const errorHandler_1 = require("./middleware/errorHandler");
@@ -38,11 +37,6 @@ app.use(express_1.default.json());
 app.use((0, morgan_1.default)("combined"));
 app.use(express_1.default.urlencoded({ extended: true }));
 // Rate limiting  
-const limiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
 app.get("/", (req, res) => {
     const appVersion = process.env.npm_package_version || "1.0.0";
     res.status(200).json({

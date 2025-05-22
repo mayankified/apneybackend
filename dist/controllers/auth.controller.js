@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteAdmin = exports.loginAdmin = exports.registerAdmin = exports.businessLogin = exports.businessRegister = exports.resetPassword = exports.forgotPassword = exports.login = exports.editUser = exports.register = void 0;
+exports.deleteAdmin = exports.loginAdmin = exports.registerAdmin = exports.businessLogin = exports.businessRegister = exports.resetPassword = exports.forgotPassword = exports.googleLogin = exports.checkUserExists = exports.login = exports.editUser = exports.register = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const client_1 = require("@prisma/client");
 const bcrypt_1 = __importDefault(require("bcrypt"));
@@ -143,6 +143,47 @@ const login = async (req, res) => {
     }
 };
 exports.login = login;
+const checkUserExists = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await prisma.user.findUnique({ where: { email } });
+        res.status(200).json({ exists: !!user });
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        res.status(500).json({ error: "Error checking user", details: errorMessage });
+    }
+};
+exports.checkUserExists = checkUserExists;
+const googleLogin = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: { favorites: true },
+        });
+        if (!user) {
+            res.status(401).json({ error: "User not found. Please sign up first." });
+            return;
+        }
+        // Generate JWT token
+        const token = jsonwebtoken_1.default.sign({ id: user.id }, JWT_SECRET, { expiresIn: "1h" });
+        const { password: _, ...userWithoutPassword } = user;
+        res.status(201).json({ user: userWithoutPassword, token });
+        return;
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            res
+                .status(500)
+                .json({ error: "Error logging in", details: error.message });
+            return;
+        }
+        res.status(500).json({ error: "Unknown error occurred" });
+        return;
+    }
+};
+exports.googleLogin = googleLogin;
 const forgotPassword = async (req, res) => {
     try {
         const { email, role } = req.body;
@@ -370,7 +411,7 @@ exports.businessRegister = businessRegister;
 const businessLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const business = await prisma.business.findUnique({ where: { email } });
+        const business = await prisma.business.findUnique({ where: { email }, include: { subscriptions: true } });
         if (!business?.password) {
             res.status(401).json({ error: "Business not found" });
             return;

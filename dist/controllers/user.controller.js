@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUser = exports.getUserReviews = exports.postReview = exports.getFavorites = exports.removeFavorite = exports.addFavorite = void 0;
 const client_1 = require("@prisma/client");
 const redis_1 = require("../config/redis");
+const mail_1 = require("../utils/mail");
 const prisma = new client_1.PrismaClient();
 // **Add a Business to Favorites (Update both `User` and `Business`)**
 const addFavorite = async (req, res) => {
@@ -145,6 +146,23 @@ const postReview = async (req, res) => {
                 image: imageUrl,
             },
         });
+        const reviewCount = await prisma.review.count({
+            where: { userId },
+        });
+        const milestones = [25, 50, 100];
+        if (milestones.includes(reviewCount)) {
+            const userDetails = await prisma.user.findUnique({
+                where: { id: userId },
+            });
+            if (userDetails && userDetails.email) {
+                const message = `
+          <p>Congratulations ${userDetails.name}!</p>
+          <p>You have just reached ${reviewCount} reviews on our platform. Keep up the great work!</p>
+          <p>Thank you for being an active member of our community.</p>
+        `;
+                await (0, mail_1.sendEmail)(userDetails.email, "Congratulations on Your Milestone!", message);
+            }
+        }
         const cacheKey = `business:${businessId}`; // Unique cache key for this business
         await redis_1.redisClient.del(cacheKey);
         await redis_1.redisClient.del("nonVerifiedReviews");
@@ -183,10 +201,10 @@ const getUserReviews = async (req, res) => {
                 },
             },
         });
-        if (reviews.length === 0) {
-            res.status(404).json({ message: "No reviews found for this user" });
-            return;
-        }
+        // if (reviews.length === 0) {
+        //   res.status(404).json({ message: "No reviews found for this user" });
+        //   return;
+        // }
         res.status(200).json(reviews);
     }
     catch (error) {

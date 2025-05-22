@@ -8,81 +8,105 @@ datasource db {
 }
 
 model User {
-  id              Int        @id @default(autoincrement())
-  name            String     @db.VarChar(255)
-  email           String     @unique
-  phone           String     @unique
-  occupation      String
-  otherOccupation String?
-  avatar          String? 
-  password        String
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  reviews         Review[]
-  reports   Report[] // ✅ Added relation field for reports made by the user
-  resetToken      String?    @db.VarChar(255) // Token for password reset
-  resetTokenExpiry DateTime?  // Expiry for the reset token
-  favorites       Business[] @relation("UserFavorites")
+  id               Int        @id @default(autoincrement())
+  name             String     @db.VarChar(255)
+  email            String     @unique
+  phone            String     @unique
+  occupation       String
+  otherOccupation  String?
+  password         String
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  avatar           String?
+  resetToken       String?    @db.VarChar(255)
+  resetTokenExpiry DateTime?
+  reports          Report[]
+  reviews          Review[]
+  favorites        Business[] @relation("UserFavorites")
 }
 
 model Business {
-  id            Int               @id @default(autoincrement())
-  ownerName     String?
-  email         String?           @unique
-  businessName  String
-  password      String?
-  reports     Report[] // ✅ Added relation field for reports against this busi
-  businessId    String?
-  isImageUpdated   Boolean?          @default(false) // New field added
-  address       String?
-  longitude     Float
-  latitude      Float
-  rating        Float?            @default(0.0)
-  imageUrls     String[]
-  timing        Json?
-  features      String[]
-  isOpen        Boolean?          @default(true)
-  isVerified    Boolean?          @default(false)
-  description   String?
-  phoneNumber   String?
-  websiteUrl    String?
-  documents     String[]
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime?         @updatedAt
-  city          String?
-  country       String?
-  streetaddress String?
-  state         String?
-  zipcode       String?
-  category      String?
-  reviews       Review[]
-  hasApplied    Boolean?          @default(false)
-  tags          Tag[]             @relation("BusinessTags")
-  favoritedBy   User[]            @relation("UserFavorites")
-  interactions  ViewInteraction[]
-  keywords      String[] // Keywords as an array of strings
-  resetToken      String?    @db.VarChar(255) // Token for password reset
-  resetTokenExpiry DateTime?  // Expiry for the reset token
+  id               Int               @id @default(autoincrement())
+  ownerName        String?
+  email            String?           @unique
+  businessName     String
+  password         String?
+  address          String?
+  longitude        Float
+  latitude         Float
+  imageUrls        String[]
+  timing           Json?
+  features         String[]
+  isOpen           Boolean?          @default(true)
+  isVerified       Boolean?          @default(false)
+  description      String?
+  phoneNumber      String?
+  websiteUrl       String?
+  subscriptions Subscription[]
+  documents        String[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime?         @updatedAt
+  city             String?
+  country          String?
+  streetaddress    String?
+  state            String?
+  zipcode          String?
+  category         String?
+  rating           Float?            @default(0.0)
+  hasApplied       Boolean?          @default(false)
+  keywords         String[]
+  resetToken       String?           @db.VarChar(255)
+  resetTokenExpiry DateTime?
+  isImageUpdated   Boolean?          @default(false)
+  businessId       String?
+  subcategory      String?
+  reports          Report[]
+  reviews          Review[]
+  interactions     ViewInteraction[]
+  tags             Tag[]             @relation("BusinessTags")
+  favoritedBy      User[]            @relation("UserFavorites")
+
 }
+
+
+model Subscription {
+  id                     Int       @id @default(autoincrement())
+  business               Business  @relation(fields: [businessId], references: [id])
+  businessId             Int
+  paypalSubId            String    @unique // PayPal subscription ID (e.g., I-XXXXXX)
+  planId                 String    // PayPal plan ID (e.g., P-XXXXXX)
+  orderId                String    // PayPal order ID (e.g., O-XXXXXX)
+  facilitatorAccessToken String    // Facilitator access token from PayPal for verification
+  status                 String    // e.g., ACTIVE, CANCELLED
+  startDate              DateTime
+  nextBillingDate        DateTime? // Next billing date (if available)
+  createdAt              DateTime  @default(now())
+  businessName           String    // Business name
+  updatedAt              DateTime  @updatedAt
+}
+
 
 model Review {
   id         Int      @id @default(autoincrement())
   content    String
-  rating     Int      // Overall rating (e.g., average of individual aspects)
-  aspects    Json     // Ratings for specific aspects (e.g., food, environment, etc.)
-  image      String?  // Optional field to store the URL or path of the image
+  rating     Int
   userId     Int
+  businessresponse  String?
   businessId Int
   createdAt  DateTime @default(now())
+  aspects    Json
+  image      String?
+  isVerified Boolean? @default(false)
   business   Business @relation(fields: [businessId], references: [id])
   user       User     @relation(fields: [userId], references: [id])
-  isVerified    Boolean?          @default(false)
 }
 
 model Tag {
   id         Int        @id @default(autoincrement())
   name       String     @unique
   businesses Business[] @relation("BusinessTags")
+
+  
 }
 
 model ViewInteraction {
@@ -92,58 +116,72 @@ model ViewInteraction {
   businessId Int
   business   Business @relation(fields: [businessId], references: [id])
 
-  @@unique([businessId, date]) // Composite unique constraint
+  @@unique([businessId, date])
 }
 
 model ItemSearch {
   id        Int      @id @default(autoincrement())
-  item      String   @unique @db.VarChar(255) // Unique item
-  count     Int      @default(0) // Track search count
+  item      String   @unique @db.VarChar(255)
+  count     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model AdminRole {
-  id              Int        @id @default(autoincrement())
-  userId          String        @unique
-  password        String     @db.VarChar(255)
-  accessUser      Boolean    @default(false)
-  accessVendor    Boolean    @default(false)
-  accessAnalytics Boolean    @default(false)
-  accessReports   Boolean    @default(false)
-  accessMarket    Boolean    @default(false)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  tasks           Task[]     @relation("AdminTasks")
+  id              Int      @id @default(autoincrement())
+  userId          String   @unique
+  password        String   @db.VarChar(255)
+  accessUser      Boolean  @default(false)
+  accessVendor    Boolean  @default(false)
+  accessAnalytics Boolean  @default(false)
+  accessReports   Boolean  @default(false)
+  accessMarket    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tasks           Task[]   @relation("AdminTasks")
 }
 
 model Activity {
   id        Int      @id @default(autoincrement())
-  name      String   @db.VarChar(255) // Name of the activity
-  text      String   @db.Text // Description or details about the activity
-  createdAt DateTime @default(now()) // Timestamp when the activity occurred
+  name      String   @db.VarChar(255)
+  text      String
+  createdAt DateTime @default(now())
 }
 
 model Report {
-  id           Int       @id @default(autoincrement())
-  reportedBy   User      @relation(fields: [userId], references: [id])
-  userId       Int
-  business     Business  @relation(fields: [businessId], references: [id])
-  businessId   Int
-  reason       String
-  description  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime? @updatedAt
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  businessId  Int
+  reason      String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+  business    Business  @relation(fields: [businessId], references: [id])
+  reportedBy  User      @relation(fields: [userId], references: [id])
 }
 
 model Task {
-  id              Int         @id @default(autoincrement())
+  id              Int        @id @default(autoincrement())
   task            String
-  createdAt       DateTime    @default(now())
+  createdAt       DateTime   @default(now())
   deadline        DateTime?
-  completed       Boolean     @default(false)
-  updatedAt       DateTime    @updatedAt
-
+  completed       Boolean    @default(false)
+  updatedAt       DateTime   @updatedAt
   assignedAdminId Int?
-  assignedAdmin   AdminRole?  @relation("AdminTasks", fields: [assignedAdminId], references: [id])
+  assignedAdmin   AdminRole? @relation("AdminTasks", fields: [assignedAdminId], references: [id])
+}
+model BusinessSuggestion {
+  id           Int      @id @default(autoincrement())
+  businessName String   @db.VarChar(255)
+  location     String   @db.VarChar(255)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
+model PageContent {
+  key       String   @id                           // e.g. "homepageHeading"
+  text      String                                 // what shows up in your <h1>
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

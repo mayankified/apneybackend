@@ -156,6 +156,52 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const checkUserExists = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    res.status(200).json({ exists: !!user });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    res.status(500).json({ error: "Error checking user", details: errorMessage });
+  }
+};
+export const googleLogin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { favorites: true },
+    });
+
+    if (!user) {
+      res.status(401).json({ error: "User not found. Please sign up first." });
+      return;
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "1h" });
+
+
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(201).json({ user: userWithoutPassword, token });
+
+
+    return;
+  } catch (error) {
+    if (error instanceof Error) {
+      res
+        .status(500)
+        .json({ error: "Error logging in", details: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Unknown error occurred" });
+    return;
+  }
+};
+
 export const forgotPassword = async (
   req: Request,
   res: Response
@@ -438,7 +484,7 @@ export const businessLogin = async (
   try {
     const { email, password } = req.body;
 
-    const business = await prisma.business.findUnique({ where: { email } });
+    const business = await prisma.business.findUnique({ where: { email }, include: { subscriptions: true } });
     if (!business?.password) {
       res.status(401).json({ error: "Business not found" });
       return;

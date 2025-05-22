@@ -34,4 +34,6 @@ router.post("/admin/new", validator_1.validateRequest, auth_controller_1.registe
 router.post("/admin/delete", validator_1.validateRequest, auth_controller_1.deleteAdmin);
 router.post("/forgotpass", auth_controller_1.forgotPassword);
 router.post("/resetpass", auth_controller_1.resetPassword);
+router.post("/check-user", auth_controller_1.checkUserExists);
+router.post("/google-login", auth_controller_1.googleLogin);
 exports.default = router;

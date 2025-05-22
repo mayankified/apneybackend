@@ -3,6 +3,8 @@ import authRoutes from "./auth.routes";
 import businessRoutes from "./business.routes";
 import userRoutes from "./user.routes"
 import adminRoutes from "./admin.routes";
+import payRoutes from "./pay.route"
+import contentRoutes from "./content.routes"
 import { getPresignedUrl } from "../utils/awsUtils";
 // import businessRoutes from './business.routes';
 // import reviewRoutes from './review.routes';
@@ -15,6 +17,8 @@ router.use("/auth", authRoutes);
 router.use("/business",businessRoutes)
 router.use("/user",userRoutes)
 router.use("/admin",adminRoutes)
+router.use("/pay",payRoutes)
+router.use("/content",contentRoutes)
 router.post("/s3/presigned-url",getPresignedUrl)
 // router.use('/business', businessRoutes);
 // router.use('/reviews', reviewRoutes);

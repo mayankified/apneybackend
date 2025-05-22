@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { redisClient } from "../config/redis";
+import { sendEmail } from "../utils/mail";
 
 const prisma = new PrismaClient();
 
@@ -171,6 +172,28 @@ export const postReview = async (
       },
     });
 
+    const reviewCount = await prisma.review.count({
+      where: { userId },
+    });
+    const milestones = [25, 50, 100];
+    if (milestones.includes(reviewCount)) {
+      const userDetails = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+      if (userDetails && userDetails.email) {
+        const message = `
+          <p>Congratulations ${userDetails.name}!</p>
+          <p>You have just reached ${reviewCount} reviews on our platform. Keep up the great work!</p>
+          <p>Thank you for being an active member of our community.</p>
+        `;
+        await sendEmail(
+          userDetails.email,
+          "Congratulations on Your Milestone!",
+          message
+        );
+      }
+    }
+
     const cacheKey = `business:${businessId}`; // Unique cache key for this business
     await redisClient.del(cacheKey);
     await redisClient.del("nonVerifiedReviews");
@@ -215,10 +238,10 @@ export const getUserReviews = async (
       },
     });
 
-    if (reviews.length === 0) {
-      res.status(404).json({ message: "No reviews found for this user" });
-      return;
-    }
+    // if (reviews.length === 0) {
+    //   res.status(404).json({ message: "No reviews found for this user" });
+    //   return;
+    // }
 
     res.status(200).json(reviews);
   } catch (error) {

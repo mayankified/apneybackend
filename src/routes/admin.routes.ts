@@ -25,66 +25,62 @@ import {
   createTask,
   updateTaskStatus,
   getTasksForAdmin,
+  getAllSuggestions,
+  editBusiness,
 } from "../controllers/admin.controller";
 import { validateRequest } from "../middleware/validator";
+import { authenticate } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
-// **Get Daywise User Created Count (Analytics)**
+// Public GET routes (analytics, general)
 router.get("/analytics/user-created", getUserCreatedCountByDay);
-
-// **Get Daywise Business Created Count (Analytics)**
 router.get("/analytics/business-created", getBusinessCreatedCountByDay);
+router.get("/analytics/total-views", getTotalViewsByDay);
+router.get("/analytics/top-item", getTopItems);
+router.get("/list", authenticate, listAdmins);
+router.get("/listbus", authenticate, listAllBusinesses);
+router.get("/review/list", authenticate, fetchReviews);
+router.get("/image/list", authenticate, listImageBusinesses);
+router.get("/top-bus", authenticate, getTopBusinessesByViews);
+router.get("/activity", authenticate, listLatestActivities);
+router.get("/notification", authenticate, fetchNotifications);
+router.get("/exportbus", authenticate, listAllBusinessesNoPagination);
+router.get("/exportrev", authenticate, listAllReviewsNoPagination);
+router.get("/getsuggestions", authenticate, getAllSuggestions);
+router.get("/task/list/:adminId", authenticate, getTasksForAdmin);
 
-// **Mark Business as Verified**
-router.post(
-  "/business/verify",
+// POST + admin sensitive routes
+router.post("/business/verify",
+  authenticate,
   [body("businessId").isInt().withMessage("Business ID must be an integer")],
   validateRequest,
   verifyBusiness
 );
 
-// **Delete Business**
-router.post(
-  "/business/delete",
+router.post("/business/delete",
+  authenticate,
   [body("businessId").isInt().withMessage("Business ID must be an integer")],
   validateRequest,
   deleteBusiness
 );
 
-// **Delete User**
-router.post(
-  "/user/delete",
+router.post("/user/delete",
+  authenticate,
   [body("userId").isInt().withMessage("User ID must be an integer")],
   validateRequest,
   deleteUser
 );
 
-// **Get Total Views of All Businesses (Daywise Analytics)**
-router.get("/analytics/total-views", getTotalViewsByDay);
+router.post("/mail", authenticate, sendEmailsToRecipients);
+router.post("/review/status", authenticate, updateReviewStatus);
+router.post("/image/status", authenticate, updateImageStatus);
+router.post("/task/add", authenticate, createTask);
+router.post("/task/update", authenticate, updateTaskStatus);
+router.post("/business/update", authenticate, editBusiness);
 
-// **List Users with limited info (Admin API)**
-router.get("/users", listUsers);
+// List users and businesses (admin only)
+router.get("/users", authenticate, listUsers);
+router.get("/businesses", authenticate, listBusinesses);
 
-// **List Businesses with limited info (Admin API)**
-router.get("/businesses", listBusinesses);
-
-router.get("/analytics/top-item", getTopItems);
-router.get("/list", listAdmins);
-router.get("/listbus",listAllBusinesses)
-router.post("/mail",sendEmailsToRecipients)
-router.post("/review/status", updateReviewStatus);
-router.post("/image/status", updateImageStatus);
-router.post("/task/add", createTask);
-router.post("/task/update",updateTaskStatus );  
-router.get("/task/list/:adminId", getTasksForAdmin);
-
-// **Route to fetch verified and non-verified reviews**
-router.get("/review/list", fetchReviews);
-router.get("/image/list", listImageBusinesses);
-router.get("/top-bus", getTopBusinessesByViews);
-router.get("/activity", listLatestActivities);
-router.get("/notification", fetchNotifications);
-router.get("/exportbus", listAllBusinessesNoPagination);
-router.get("/exportrev", listAllReviewsNoPagination);
 export default router;
